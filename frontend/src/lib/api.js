@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL ?? '';
+const BASE = import.meta.env.VITE_API_URL ?? 'https://safarsetu-backend-production-cd62.up.railway.app';
 
 export function getStoredAuth() {
   try {

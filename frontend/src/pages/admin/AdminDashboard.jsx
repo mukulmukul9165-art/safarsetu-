@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -13,7 +13,38 @@ import {
 } from 'recharts';
 import toast from 'react-hot-toast';
 import RouteMap from '../../components/RouteMap';
+import AdminListToolbar from '../../components/admin/AdminListToolbar';
 import { api } from '../../lib/api.js';
+
+function matchQuery(query, ...fields) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return fields.some((f) => String(f ?? '').toLowerCase().includes(q));
+}
+
+const CUSTOMER_FILTER_OPTIONS = [
+  { value: 'all', labelKey: 'admin.filter_all' },
+  { value: 'has_rides', labelKey: 'admin.filter_has_rides' },
+  { value: 'no_rides', labelKey: 'admin.filter_no_rides' },
+  { value: 'high_spent', labelKey: 'admin.filter_high_spent' },
+];
+
+const DRIVER_FILTER_OPTIONS = [
+  { value: 'all', labelKey: 'admin.filter_all' },
+  { value: 'available', labelKey: 'admin.filter_available' },
+  { value: 'busy', labelKey: 'admin.filter_busy' },
+  { value: 'pending', labelKey: 'admin.filter_pending_approval' },
+  { value: 'approved', labelKey: 'admin.filter_approved' },
+  { value: 'rejected', labelKey: 'admin.filter_rejected' },
+];
+
+const CAR_FILTER_OPTIONS = [
+  { value: 'all', labelKey: 'admin.filter_all' },
+  { value: 'rate_low', labelKey: 'admin.filter_rate_low' },
+  { value: 'rate_high', labelKey: 'admin.filter_rate_high' },
+  { value: 'seats_4', labelKey: 'admin.filter_seats_4' },
+  { value: 'seats_6_plus', labelKey: 'admin.filter_seats_6_plus' },
+];
 
 function parseKm(distanceStr) {
   if (!distanceStr) return null;
@@ -74,6 +105,48 @@ const AdminDashboard = ({ activeTab }) => {
   const [showCarModal, setShowCarModal] = useState(false);
   const [carForm, setCarForm] = useState({ id: null, name: '', type: '', pricePerKm: '', seats: '', eta: '', image: null });
   const [allBookings, setAllBookings] = useState([]);
+
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('all');
+  const [driverSearch, setDriverSearch] = useState('');
+  const [driverFilter, setDriverFilter] = useState('all');
+  const [carSearch, setCarSearch] = useState('');
+  const [carFilter, setCarFilter] = useState('all');
+
+  const filteredCustomers = useMemo(() => {
+    return customers.filter((c) => {
+      if (!matchQuery(customerSearch, c.name, c.phone, c.location)) return false;
+      if (customerFilter === 'has_rides') return (c.totalRides ?? 0) > 0;
+      if (customerFilter === 'no_rides') return (c.totalRides ?? 0) === 0;
+      if (customerFilter === 'high_spent') return (c.spent ?? 0) >= 500;
+      return true;
+    });
+  }, [customers, customerSearch, customerFilter]);
+
+  const filteredDrivers = useMemo(() => {
+    return drivers.filter((d) => {
+      if (!matchQuery(driverSearch, d.name, d.phone, d.location, d.carType, d.vehicleNumber)) return false;
+      if (driverFilter === 'available') return d.status === 'Available';
+      if (driverFilter === 'busy') return d.status === 'Busy';
+      if (driverFilter === 'pending') return d.approvalStatus === 'Pending';
+      if (driverFilter === 'approved') return d.approvalStatus === 'Approved';
+      if (driverFilter === 'rejected') return d.approvalStatus === 'Rejected';
+      return true;
+    });
+  }, [drivers, driverSearch, driverFilter]);
+
+  const filteredCars = useMemo(() => {
+    return adminCars.filter((car) => {
+      if (!matchQuery(carSearch, car.name, car.type)) return false;
+      const rate = Number(car.pricePerKm) || 0;
+      const seats = Number(car.seats) || 0;
+      if (carFilter === 'rate_low') return rate > 0 && rate < 15;
+      if (carFilter === 'rate_high') return rate >= 15;
+      if (carFilter === 'seats_4') return seats === 4;
+      if (carFilter === 'seats_6_plus') return seats >= 6;
+      return true;
+    });
+  }, [adminCars, carSearch, carFilter]);
 
   const handleFileUpload = (e, field, setter = setDriverForm) => {
     const file = e.target.files[0];
@@ -548,11 +621,23 @@ const AdminDashboard = ({ activeTab }) => {
                <h3 className="text-lg sm:text-2xl font-black tracking-tighter uppercase italic">{t('admin.customer_dir')}</h3>
                <button onClick={() => handleCustomerModal('add')} className="btn-primary px-4 sm:px-6 py-2.5 sm:py-3 flex items-center gap-2 font-black uppercase tracking-widest text-xs"><FaPlus /> {t('admin.add_customer')}</button>
             </div>
+            <AdminListToolbar
+              search={customerSearch}
+              onSearchChange={setCustomerSearch}
+              filter={customerFilter}
+              onFilterChange={setCustomerFilter}
+              filterOptions={CUSTOMER_FILTER_OPTIONS}
+              total={customers.length}
+              shown={filteredCustomers.length}
+              placeholderKey="admin.search_customers"
+            />
             <div className="overflow-x-auto">
                <table className="w-full text-left">
                   <thead><tr className="text-muted text-[10px] uppercase tracking-widest border-b border-border"><th className="pb-4">{t('nav.customers')}</th><th className="pb-4">{t('admin.location')}</th><th className="pb-4">{t('admin.joined')}</th><th className="pb-4">{t('admin.total_rides_col')}</th><th className="pb-4">{t('admin.total_spent')}</th><th className="pb-4 text-right">{t('admin.actions')}</th></tr></thead>
                   <tbody className="text-sm">
-                    {customers.map(c => (
+                    {filteredCustomers.length === 0 ? (
+                      <tr><td colSpan={6} className="py-12 text-center text-muted text-sm font-bold uppercase tracking-widest">{t('admin.no_results')}</td></tr>
+                    ) : filteredCustomers.map(c => (
                       <tr key={c.id} className="border-b border-border hover:bg-muted/10 transition-all group">
                         <td className="py-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 font-bold">{c.name.charAt(0)}</div><div><p className="font-bold text-foreground">{c.name}</p><div className="flex items-center gap-1.5 mt-0.5"><a href={`tel:+91${c.phone}`} title={t('admin.call_customer')} className="text-green-600 bg-green-500/10 p-1 rounded-md hover:bg-green-600 hover:text-white transition-all"><FaPhoneAlt size={10} /></a><p className="text-xs text-muted font-medium tracking-wide">+91 {c.phone}</p></div></div></div></td>
                         <td className="py-5 text-muted font-medium italic">{c.location}</td><td className="py-5 text-muted text-xs">{c.joined}</td><td className="py-5 font-bold text-foreground uppercase text-xs">{t('admin.rides_count', { count: c.totalRides })}</td><td className="py-5 font-black text-primary">₹{c.spent}</td>
@@ -571,11 +656,39 @@ const AdminDashboard = ({ activeTab }) => {
                <h3 className="text-lg sm:text-2xl font-black tracking-tighter italic uppercase">{t('admin.driver_approvals')}</h3>
                <button onClick={() => handleDriverModal('add')} className="btn-primary px-4 sm:px-6 py-2.5 sm:py-3 flex items-center gap-2 font-black uppercase tracking-widest text-xs"><FaPlus /> {t('admin.add_driver')}</button>
             </div>
+            <AdminListToolbar
+              search={driverSearch}
+              onSearchChange={setDriverSearch}
+              filter={driverFilter}
+              onFilterChange={setDriverFilter}
+              filterOptions={DRIVER_FILTER_OPTIONS}
+              total={drivers.length}
+              shown={filteredDrivers.length}
+              placeholderKey="admin.search_drivers"
+            />
+            <div className="flex flex-wrap gap-2 mb-4">
+              {['pending', 'approved', 'available'].map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setDriverFilter(key)}
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
+                    driverFilter === key
+                      ? 'bg-primary text-dark border-primary'
+                      : 'border-border text-muted hover:border-primary/40'
+                  }`}
+                >
+                  {key === 'pending' ? t('admin.filter_pending_approval') : key === 'approved' ? t('admin.filter_approved') : t('admin.filter_available')}
+                </button>
+              ))}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead><tr className="text-muted text-[10px] uppercase tracking-widest border-b border-border"><th className="pb-4">{t('nav.drivers')}</th><th className="pb-4">{t('admin.location')}</th><th className="pb-4">{t('admin.vehicle')}</th><th className="pb-4">{t('admin.status')}</th><th className="pb-4">{t('admin.docs')}</th><th className="pb-4 text-right">{t('admin.actions')}</th></tr></thead>
                 <tbody className="text-sm">
-                  {drivers.map((driver) => (
+                  {filteredDrivers.length === 0 ? (
+                    <tr><td colSpan={6} className="py-12 text-center text-muted text-sm font-bold uppercase tracking-widest">{t('admin.no_results')}</td></tr>
+                  ) : filteredDrivers.map((driver) => (
                     <tr key={driver.id} className="border-b border-border hover:bg-muted/10 transition-all">
                       <td className="py-5"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">{driver.name.charAt(0)}</div><div><p className="font-bold text-foreground">{driver.name}</p><div className="flex items-center gap-1.5 mt-0.5"><a href={`tel:+91${driver.phone}`} title={t('admin.call_driver')} className="text-green-600 bg-green-500/10 p-1 rounded-md hover:bg-green-600 hover:text-white transition-all"><FaPhoneAlt size={10} /></a><p className="text-[10px] text-muted uppercase tracking-widest">+91 {driver.phone}</p></div></div></div></td>
                       <td className="py-5 text-muted font-medium italic">{driver.location}</td>
@@ -626,8 +739,20 @@ const AdminDashboard = ({ activeTab }) => {
                 <FaPlus /> {t('admin.add_vehicle')}
               </button>
             </div>
+            <AdminListToolbar
+              search={carSearch}
+              onSearchChange={setCarSearch}
+              filter={carFilter}
+              onFilterChange={setCarFilter}
+              filterOptions={CAR_FILTER_OPTIONS}
+              total={adminCars.length}
+              shown={filteredCars.length}
+              placeholderKey="admin.search_cars"
+            />
             <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
-              {adminCars.map((car) => (
+              {filteredCars.length === 0 ? (
+                <p className="col-span-full py-12 text-center text-muted text-sm font-bold uppercase tracking-widest">{t('admin.no_results')}</p>
+              ) : filteredCars.map((car) => (
                 <div key={car.id} className="glass-card p-4 sm:p-8 group relative overflow-hidden text-center">
                   <button 
                     onClick={() => handleDeleteCar(car.id, car.name)}

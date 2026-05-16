@@ -49,6 +49,8 @@ model User {
   driverProfile      DriverProfile?
   bookingsAsCustomer Booking[] @relation("CustomerBooking")
   bookingsAsDriver   Booking[] @relation("DriverBooking")
+
+  @@map("user")
 }
 
 model DriverProfile {
@@ -61,6 +63,8 @@ model DriverProfile {
   licensePhotoUrl String? @db.LongText
   approvalStatus  DriverApproval   @default(PENDING)
   workStatus      DriverWorkStatus @default(AVAILABLE)
+
+  @@map("driverprofile")
 }
 
 model CarCategory {
@@ -72,6 +76,8 @@ model CarCategory {
   image      String @db.LongText
   eta        String @default("5 mins")
   sortOrder  Int    @default(0)
+
+  @@map("carcategory")
 }
 
 model Booking {
@@ -96,6 +102,8 @@ model Booking {
   createdAt    DateTime      @default(now())
 
   payments Payment[]
+
+  @@map("booking")
 }
 
 model Payment {
@@ -107,4 +115,6 @@ model Payment {
   method       String
   status       String
   date         String
+
+  @@map("payment")
 }

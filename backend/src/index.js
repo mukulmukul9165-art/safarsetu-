@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import prisma from './prisma.js';
 import authRoutes from './routes/auth.routes.js';
 import bookingsRoutes from './routes/bookings.routes.js';
 import adminRoutes from './routes/admin.routes.js';
@@ -9,23 +10,57 @@ import mapsRoutes from './routes/maps.routes.js';
 import catalogRoutes from './routes/catalog.routes.js';
 
 const app = express();
-const PORT = Number(process.env.PORT) || 4000;
+const PORT = process.env.PORT || 4000;
 
-const origins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+// Railway/Proxy support
+app.set('trust proxy', 1);
+
+// Flexible CORS for Local + Production
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://cab-book-barwani.netlify.app',
+  process.env.CORS_ORIGIN
+].filter(Boolean);
 
 app.use(
   cors({
-    origin: origins,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '2mb' }));
+
+app.use(express.json({ limit: '5mb' }));
+
+// Health Check & Root Routes for Railway
+app.get('/', (_req, res) => {
+  res.json({
+    status: 'online',
+    message: 'SafarSetu API is running',
+    version: '1.0.0',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/test', async (_req, res) => {
+  try {
+    const userCount = await prisma.user.count();
+    res.json({ ok: true, database: 'connected', users: userCount });
+  } catch (error) {
+    res.status(500).json({ ok: false, database: 'error', error: error.message });
+  }
+});
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/maps', mapsRoutes);
 app.use('/api/catalog', catalogRoutes);
@@ -33,11 +68,30 @@ app.use('/api/bookings', bookingsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/superadmin', superadminRoutes);
 
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ message: 'Internal error' });
+// 404 Handler
+app.use((_req, res) => {
+  res.status(404).json({ message: 'Route not found' });
 });
 
-app.listen(PORT, () => {
-  console.log(`API http://localhost:${PORT}`);
+// Global Error Handler
+app.use((err, _req, res, _next) => {
+  console.error('SERVER_ERROR:', err);
+  const status = err.status || 500;
+  res.status(status).json({
+    message: err.message || 'Internal server error',
+    error: process.env.NODE_ENV === 'development' ? err : {}
+  });
+});
+
+app.listen(PORT, '0.0.0.0', async () => {
+  console.log(`🚀 Server started on port ${PORT}`);
+  console.log(`🔗 Allowed Origins: ${allowedOrigins.join(', ')}`);
+  
+  // Test DB connection on startup
+  try {
+    await prisma.$connect();
+    console.log('✅ Database connected successfully');
+  } catch (error) {
+    console.error('❌ Database connection failed:', error.message);
+  }
 });

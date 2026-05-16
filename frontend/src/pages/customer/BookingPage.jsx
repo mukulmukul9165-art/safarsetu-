@@ -52,6 +52,7 @@ const BookingPage = ({ activeTab, user }) => {
   const [bookingTime, setBookingTime] = useState('');
   const [showMobilePanel, setShowMobilePanel] = useState(true);
   const [allBookings, setAllBookings] = useState([]);
+  const [activeFilter, setActiveFilter] = useState('All');
   const routeTimer = useRef(null);
 
   const displayName = user?.name || t('booking.rider_fallback');
@@ -325,11 +326,31 @@ const BookingPage = ({ activeTab, user }) => {
 
                 {/* Car Selection */}
                 <div className="space-y-4">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-muted flex items-center gap-2">
-                     <div className="w-8 h-[1px] bg-dark/10" /> {t('booking.categories')}
-                  </h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-muted flex items-center gap-2">
+                       <div className="w-8 h-[1px] bg-dark/10" /> {t('booking.categories')}
+                    </h3>
+                    <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1">
+                      {['All', ...new Set(cars.map(c => c.name))].map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => setActiveFilter(cat)}
+                          className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter transition-all whitespace-nowrap ${
+                            activeFilter === cat 
+                              ? 'bg-primary text-dark shadow-lg shadow-primary/20' 
+                              : 'bg-dark/5 text-muted hover:bg-dark/10'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar pb-4">
-                    {(cars || []).map((car) => (
+                    <AnimatePresence mode="popLayout">
+                      {(cars || [])
+                        .filter(car => activeFilter === 'All' || car.name === activeFilter)
+                        .map((car) => (
                       <motion.div
                         key={car.id}
                         whileHover={{ x: 5 }}
@@ -357,6 +378,7 @@ const BookingPage = ({ activeTab, user }) => {
                         </div>
                       </motion.div>
                     ))}
+                    </AnimatePresence>
                   </div>
                 </div>
              </div>
