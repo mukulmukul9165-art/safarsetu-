@@ -317,8 +317,8 @@ router.get('/payments', async (_req, res) => {
 router.get('/dashboard-stats', async (req, res) => {
   try {
     const allBookings = await prisma.booking.findMany();
-    const completedBookings = allBookings.filter(b => b.status === 'COMPLETED');
-    const dbCommissions = completedBookings.reduce((sum, b) => sum + Math.floor(b.fare * 0.12), 0);
+    const completed = allBookings.filter(b => b.status === 'COMPLETED');
+    const dbCommissions = completed.reduce((sum, b) => sum + Math.floor(b.fare * 0.12), 0);
 
     const approvedDrivers = await prisma.user.count({
       where: { role: 'DRIVER', driverProfile: { approvalStatus: 'APPROVED' } }
