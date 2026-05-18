@@ -297,7 +297,10 @@ router.delete('/cars/:id', async (req, res) => {
 });
 
 router.get('/payments', async (_req, res) => {
-  const rows = await prisma.payment.findMany({ orderBy: { id: 'desc' } });
+  const rows = await prisma.payment.findMany({
+    where: { status: 'Completed' },
+    orderBy: { id: 'desc' }
+  });
   res.json(
     rows.map((p) => ({
       id: p.id,
@@ -314,19 +317,19 @@ router.get('/payments', async (_req, res) => {
 router.get('/dashboard-stats', async (req, res) => {
   try {
     const allBookings = await prisma.booking.findMany();
-    const completed = allBookings.filter(b => b.status === 'COMPLETED');
-    const dbCommissions = completed.reduce((sum, b) => sum + Math.floor(b.fare * 0.12), 0);
+    const completedBookings = allBookings.filter(b => b.status === 'COMPLETED');
+    const dbCommissions = completedBookings.reduce((sum, b) => sum + Math.floor(b.fare * 0.12), 0);
 
     const approvedDrivers = await prisma.user.count({
       where: { role: 'DRIVER', driverProfile: { approvalStatus: 'APPROVED' } }
     });
 
-    const totalPaymentsSum = await prisma.payment.aggregate({
-      _sum: { amount: true }
+    const completedPayments = await prisma.payment.findMany({
+      where: { status: 'Completed' }
     });
-    const paymentsTotal = totalPaymentsSum._sum.amount || 0;
+    const paymentsCommissionTotal = completedPayments.reduce((sum, p) => sum + Math.floor(p.amount * 0.12), 0);
 
-    const walletBalance = 124500 + paymentsTotal;
+    const walletBalance = 124500 + paymentsCommissionTotal;
     const totalCommissions = 5433 + dbCommissions;
 
     const revenueData = [
