@@ -52,8 +52,8 @@ const RouteMap = ({
         style={{ height: '100%', width: '100%', minHeight: '260px' }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
 
         <Marker position={pickupCoords} icon={pickupIcon}>
@@ -68,7 +68,20 @@ const RouteMap = ({
           </Popup>
         </Marker>
 
-        <Polyline positions={positions} color="#FFD600" weight={4} opacity={0.8} dashArray="10, 10" />
+        {/* Bottom Thick Glow Shadow Line */}
+        <Polyline 
+          positions={positions} 
+          color="#1557B0" 
+          weight={8} 
+          opacity={0.3} 
+        />
+        {/* Top Premium Google Maps Blue Route Line */}
+        <Polyline 
+          positions={positions} 
+          color="#1A73E8" 
+          weight={5} 
+          opacity={0.95} 
+        />
       </MapContainer>
 
       <div className="absolute top-3 left-3 sm:top-6 sm:left-6 z-[1000] p-2.5 sm:p-4 glass-card border-primary/30 pointer-events-none">
