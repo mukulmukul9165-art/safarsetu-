@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -43,14 +43,30 @@ const RouteMap = ({
       ? Number(distanceKm).toFixed(1)
       : '—';
 
+  const ChangeViewAndBounds = () => {
+    const map = useMap();
+    useEffect(() => {
+      if (positions && positions.length >= 2) {
+        const bounds = L.latLngBounds(positions);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }, [map]);
+    return null;
+  };
+
   return (
     <div className="w-full h-full min-h-[260px] rounded-2xl overflow-hidden relative border border-border shadow-2xl">
       <MapContainer
         center={center}
         zoom={13}
-        scrollWheelZoom={false}
+        scrollWheelZoom={true}
+        dragging={true}
+        touchZoom={true}
+        doubleClickZoom={true}
+        zoomControl={true}
         style={{ height: '100%', width: '100%', minHeight: '260px' }}
       >
+        <ChangeViewAndBounds />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"

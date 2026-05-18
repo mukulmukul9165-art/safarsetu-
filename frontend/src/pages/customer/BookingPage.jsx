@@ -24,9 +24,16 @@ const createCustomIcon = (color) => L.divIcon({
 const pickupIcon = createCustomIcon('#22c55e'); // Green
 const dropIcon = createCustomIcon('#ef4444');   // Red
 
-const ChangeView = ({ center }) => {
+const ChangeView = ({ center, routeCoords }) => {
   const map = useMap();
-  map.setView(center, map.getZoom());
+  useEffect(() => {
+    if (routeCoords && routeCoords.length >= 2) {
+      const bounds = L.latLngBounds(routeCoords);
+      map.fitBounds(bounds, { padding: [50, 50] });
+    } else {
+      map.setView(center, map.getZoom());
+    }
+  }, [map, center, routeCoords]);
   return null;
 };
 
@@ -516,6 +523,11 @@ const BookingPage = ({ activeTab, user }) => {
             <MapContainer
               center={mapCenter}
               zoom={11}
+              scrollWheelZoom={true}
+              dragging={true}
+              touchZoom={true}
+              doubleClickZoom={true}
+              zoomControl={true}
               className="w-full h-full z-10"
               style={{ height: '100%', width: '100%', background: 'white' }}
             >
@@ -523,7 +535,7 @@ const BookingPage = ({ activeTab, user }) => {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
                 url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
               />
-              <ChangeView center={mapCenter} />
+              <ChangeView center={mapCenter} routeCoords={routeCoords} />
               <ResizeMap trigger={showMobilePanel} />
               <MapEvents />
               {routeCoords.length > 0 && (
