@@ -19,10 +19,16 @@ const DriverDashboard = ({ activeTab, user, setDriverTab }) => {
   const [activeTrip, setActiveTrip] = useState(null);
   const [isArrived, setIsArrived] = useState(false);
 
+  const [driverStats, setDriverStats] = useState(null);
+
   const loadBookings = useCallback(async () => {
     try {
-      const list = await api('/api/bookings');
+      const [list, stats] = await Promise.all([
+        api('/api/bookings'),
+        api('/api/bookings/driver-stats')
+      ]);
       setAllBookings(Array.isArray(list) ? list : []);
+      setDriverStats(stats);
     } catch {
       /* ignore */
     }
@@ -97,7 +103,7 @@ const DriverDashboard = ({ activeTab, user, setDriverTab }) => {
                     <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center text-dark text-xl shadow-lg shadow-green-500/20"><FaWallet /></div>
                     <div>
                       <p className="text-[9px] text-green-500 uppercase font-black mb-0.5">{t('driver.today_earnings')}</p>
-                      <p className="text-xl sm:text-2xl font-black text-dark">₹2,450</p>
+                      <p className="text-xl sm:text-2xl font-black text-dark">₹{driverStats ? driverStats.todayEarnings.toLocaleString() : "2,450"}</p>
                     </div>
                   </div>
                 </div>
@@ -105,10 +111,10 @@ const DriverDashboard = ({ activeTab, user, setDriverTab }) => {
                 {/* Stats Grid */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
                   {[
-                    { labelKey: 'driver.rating', val: '4.95', icon: <FaCheckCircle />, color: 'text-blue-600' },
-                    { labelKey: 'driver.trips_done', val: '12', icon: <FaRoute />, color: 'text-primary' },
-                    { labelKey: 'driver.online_hours', val: '6.5h', icon: <FaClock />, color: 'text-green-600' },
-                    { labelKey: 'driver.acceptance', val: '98%', icon: <FaCheckCircle />, color: 'text-yellow-600' },
+                    { labelKey: 'driver.rating', val: driverStats?.rating || '4.95', icon: <FaCheckCircle />, color: 'text-blue-600' },
+                    { labelKey: 'driver.trips_done', val: driverStats?.tripsDone || '12', icon: <FaRoute />, color: 'text-primary' },
+                    { labelKey: 'driver.online_hours', val: driverStats?.onlineHours || '6.5h', icon: <FaClock />, color: 'text-green-600' },
+                    { labelKey: 'driver.acceptance', val: driverStats?.acceptance || '98%', icon: <FaCheckCircle />, color: 'text-yellow-600' },
                   ].map((stat, i) => (
                     <div key={i} className="glass-card p-4 sm:p-8 group hover:border-primary/30 transition-all">
                        <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-dark/5 flex items-center justify-center text-xl sm:text-2xl mb-4 sm:mb-6 ${stat.color} group-hover:scale-110 transition-transform`}>{stat.icon}</div>
@@ -139,9 +145,9 @@ const DriverDashboard = ({ activeTab, user, setDriverTab }) => {
                         
                         <div className="grid grid-cols-3 gap-4 pt-4">
                            {[
-                             { labelKey: 'driver.period_today', val: '₹2,450' },
-                             { labelKey: 'driver.period_week', val: '₹18.4K' },
-                             { labelKey: 'driver.period_month', val: '₹72.8K' }
+                             { labelKey: 'driver.period_today', val: driverStats ? `₹${driverStats.todayEarnings.toLocaleString()}` : '₹2,450' },
+                             { labelKey: 'driver.period_week', val: driverStats ? `₹${(driverStats.weekEarnings / 1000).toFixed(1)}K` : '₹18.4K' },
+                             { labelKey: 'driver.period_month', val: driverStats ? `₹${(driverStats.monthEarnings / 1000).toFixed(1)}K` : '₹72.8K' }
                            ].map((item, i) => (
                              <div key={i} className="text-center p-4 bg-dark/5 rounded-2xl border border-border">
                                 <p className="text-[8px] sm:text-[9px] text-muted uppercase font-black mb-1">{t(item.labelKey)}</p>
@@ -248,9 +254,9 @@ const DriverDashboard = ({ activeTab, user, setDriverTab }) => {
                 <h3 className="text-2xl sm:text-3xl font-black mb-4 tracking-tighter italic">{t('driver.earnings_summary')}</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8 mt-8 sm:mt-12">
                   {[
-                    { label: t('driver.week_total'), val: '₹18,400', color: 'text-dark' },
-                    { label: t('driver.month_total'), val: '₹72,850', color: 'text-dark' },
-                    { label: t('driver.bonuses'), val: '₹4,200', color: 'text-green-600' },
+                    { label: t('driver.week_total'), val: driverStats ? `₹${driverStats.weekEarnings.toLocaleString()}` : '₹18,400', color: 'text-dark' },
+                    { label: t('driver.month_total'), val: driverStats ? `₹${driverStats.monthEarnings.toLocaleString()}` : '₹72,850', color: 'text-dark' },
+                    { label: t('driver.bonuses'), val: driverStats ? `₹${driverStats.bonuses.toLocaleString()}` : '₹4,200', color: 'text-green-600' },
                   ].map((item, i) => (
                     <div key={i} className="p-6 sm:p-8 bg-dark/5 rounded-2xl sm:rounded-3xl border border-border">
                       <p className="text-xs text-muted font-bold uppercase mb-2">{item.label}</p>
@@ -266,23 +272,43 @@ const DriverDashboard = ({ activeTab, user, setDriverTab }) => {
               <div className="glass-card p-4 sm:p-8">
                 <h3 className="text-xl sm:text-2xl font-black tracking-tighter mb-5 sm:mb-8 italic uppercase">{t('driver.trip_history')}</h3>
                 <div className="space-y-3 sm:space-y-4">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-4 sm:p-6 bg-dark/5 rounded-xl sm:rounded-2xl border border-border hover:border-primary/20 transition-all">
-                      <div className="flex items-center gap-3 sm:gap-6">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary text-base sm:text-xl">
-                          <FaRoute />
+                  {allBookings.filter(b => b.status === 'Completed').length > 0 ? (
+                    allBookings.filter(b => b.status === 'Completed').map((b) => (
+                      <div key={b.id} className="flex items-center justify-between p-4 sm:p-6 bg-dark/5 rounded-xl sm:rounded-2xl border border-border hover:border-primary/20 transition-all">
+                        <div className="flex items-center gap-3 sm:gap-6">
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary text-base sm:text-xl">
+                            <FaRoute />
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm sm:text-lg text-dark">{t('driver.trip_number', { id: b.id.length > 10 ? `#${b.id.slice(-5)}` : b.id })}</p>
+                            <p className="text-[10px] sm:text-xs text-muted">Completed {b.date || 'Today'} • {b.distance}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-bold text-sm sm:text-lg text-dark">{t('driver.trip_number', { id: 10234 + i })}</p>
-                          <p className="text-[10px] sm:text-xs text-muted">{t('driver.trip_completed', { day: `1${i}`, km: '12.5' })}</p>
+                        <div className="text-right">
+                          <p className="text-base sm:text-xl font-black text-dark">₹{b.fare}</p>
+                          <p className="text-[9px] sm:text-[10px] text-green-600 uppercase font-black">{t('driver.paid')}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-base sm:text-xl font-black text-dark">₹{450 + (i * 20)}</p>
-                        <p className="text-[9px] sm:text-[10px] text-green-600 uppercase font-black">{t('driver.paid')}</p>
+                    ))
+                  ) : (
+                    [1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="flex items-center justify-between p-4 sm:p-6 bg-dark/5 rounded-xl sm:rounded-2xl border border-border hover:border-primary/20 transition-all">
+                        <div className="flex items-center gap-3 sm:gap-6">
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary text-base sm:text-xl">
+                            <FaRoute />
+                          </div>
+                          <div>
+                            <p className="font-bold text-sm sm:text-lg text-dark">{t('driver.trip_number', { id: 10234 + i })}</p>
+                            <p className="text-[10px] sm:text-xs text-muted">{t('driver.trip_completed', { day: `1${i}`, km: '12.5' })}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-base sm:text-xl font-black text-dark">₹{450 + (i * 20)}</p>
+                          <p className="text-[9px] sm:text-[10px] text-green-600 uppercase font-black">{t('driver.paid')}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             )}

@@ -37,7 +37,6 @@ model User {
   id           String   @id @default(cuid())
   phone        String   @unique
   passwordHash String
-  plainPassword String?
   name         String
   role         Role
   location     String?
