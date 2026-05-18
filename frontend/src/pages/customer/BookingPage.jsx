@@ -57,6 +57,24 @@ const BookingPage = ({ activeTab, user }) => {
   const [activeFilter, setActiveFilter] = useState('All');
   const routeTimer = useRef(null);
 
+  const fetchAddressName = async (lat, lng) => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
+        headers: { 'Accept-Language': 'en' }
+      });
+      const data = await res.json();
+      if (data && data.address) {
+        const addr = data.address;
+        const place = addr.city || addr.town || addr.village || addr.suburb || addr.hamlet || addr.county || data.display_name.split(',')[0];
+        const state = addr.state ? `, ${addr.state}` : '';
+        return `${place}${state}`;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  };
+
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
       toast.error("Geolocation is not supported by your browser");
@@ -64,10 +82,11 @@ const BookingPage = ({ activeTab, user }) => {
     }
     const loadId = toast.loading("Fetching current location...");
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        toast.dismiss(loadId);
+      async (position) => {
         const { latitude, longitude } = position.coords;
-        setPickup(`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`);
+        const address = await fetchAddressName(latitude, longitude);
+        setPickup(address);
+        toast.dismiss(loadId);
         toast.success("Current location set!");
       },
       (error) => {
@@ -89,15 +108,21 @@ const BookingPage = ({ activeTab, user }) => {
   const MapEvents = () => {
     const map = useMap();
     useEffect(() => {
-      const handleMapClick = (e) => {
+      const handleMapClick = async (e) => {
         const { lat, lng } = e.latlng;
         if (activeSelectionMode === 'pickup') {
-          setPickup(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          const loadId = toast.loading("Resolving pickup address...");
+          const address = await fetchAddressName(lat, lng);
+          setPickup(address);
           setActiveSelectionMode(null);
+          toast.dismiss(loadId);
           toast.success("Pickup location marked!");
         } else if (activeSelectionMode === 'drop') {
-          setDrop(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          const loadId = toast.loading("Resolving drop address...");
+          const address = await fetchAddressName(lat, lng);
+          setDrop(address);
           setActiveSelectionMode(null);
+          toast.dismiss(loadId);
           toast.success("Drop location marked!");
         }
       };
@@ -496,7 +521,7 @@ const BookingPage = ({ activeTab, user }) => {
             >
               <TileLayer 
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" 
+                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
               />
               <ChangeView center={mapCenter} />
               <ResizeMap trigger={showMobilePanel} />
@@ -512,15 +537,15 @@ const BookingPage = ({ activeTab, user }) => {
                   {/* Bottom Thick Glow Shadow Line */}
                   <Polyline 
                     positions={routeCoords} 
-                    color="#000000" 
+                    color="#1557B0" 
                     weight={8} 
-                    opacity={0.15} 
+                    opacity={0.3} 
                   />
-                  {/* Top Premium Brand Glowing Accent Route Line */}
+                  {/* Top Premium Google Maps Blue Route Line */}
                   <Polyline 
                     positions={routeCoords} 
-                    color="#E8B34B" 
-                    weight={4.5} 
+                    color="#1A73E8" 
+                    weight={5} 
                     opacity={0.95} 
                   />
                 </>
