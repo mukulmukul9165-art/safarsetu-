@@ -65,7 +65,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/maps', mapsRoutes);
 app.use('/api/catalog', catalogRoutes);
 app.use('/api/bookings', bookingsRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', adminRoutes); // Admin stats & CRUD routes
 app.use('/api/superadmin', superadminRoutes);
 
 // 404 Handler
