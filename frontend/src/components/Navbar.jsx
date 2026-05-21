@@ -8,6 +8,7 @@ import {
   FaWallet, FaTimes, FaBars, FaGlobe
 } from 'react-icons/fa';
 import AuthModal from './AuthModal';
+import logo from '../../images/logo.png'
 
 const LanguageSwitcher = () => {
   const { i18n, t } = useTranslation();
@@ -128,9 +129,10 @@ const Navbar = ({ user, logout, login, setAdminTab, setDriverTab, setCustomerTab
       <nav className="fixed top-0 w-full z-50 bg-background/90 backdrop-blur-lg border-b border-border">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2" onClick={() => setIsMobileMenuOpen(false)}>
-            <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/30">
+            {/* <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/30">
               <FaCarSide className="text-dark text-xl" />
-            </div>
+            </div> */}
+            <img className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/30" src={logo} alt="logo" />
             <span className="text-lg font-bold tracking-tighter uppercase text-dark">
               Safar<span className="text-primary">Setu</span>
             </span>

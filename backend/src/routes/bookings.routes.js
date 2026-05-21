@@ -168,6 +168,14 @@ router.patch('/:id', authMiddleware(['ADMIN', 'DRIVER']), async (req, res) => {
         });
         return res.json(bookingToJson(updated));
       }
+      if (req.body.action === 'complete' && booking.status === 'ACCEPTED') {
+        const updated = await prisma.booking.update({
+          where: { id },
+          data: { status: 'COMPLETED' },
+          include: includeBooking,
+        });
+        return res.json(bookingToJson(updated));
+      }
       return res.status(400).json({ message: 'Invalid driver update' });
     }
 
