@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, FlatList, Dimensions, Linking, Alert } from 'react-native';
 import { useLanguage } from '../../context/LanguageContext';
 import { COLORS } from '../../theme/colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -216,11 +216,25 @@ export default function LandingScreen({ navigation }) {
             <Text style={styles.contactDesc}>{t('contact.desc')}</Text>
             
             <View style={styles.contactBtns}>
-              <TouchableOpacity style={styles.callBtn}>
+              <TouchableOpacity
+                style={styles.callBtn}
+                onPress={() => {
+                  Linking.openURL('tel:+916261828036').catch(() =>
+                    Alert.alert('Error', 'Could not open phone dialer.')
+                  );
+                }}
+              >
                 <Ionicons name="call" size={18} color={COLORS.text} style={{marginRight: 8}}/>
                 <Text style={styles.callBtnText}>{t('contact.call_btn')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.waBtn}>
+              <TouchableOpacity
+                style={styles.waBtn}
+                onPress={() => {
+                  Linking.openURL('https://wa.me/916261828036?text=Hello%20SafarSetu%2C%20I%20need%20help%20with%20my%20booking.').catch(() =>
+                    Alert.alert('Error', 'Could not open WhatsApp.')
+                  );
+                }}
+              >
                 <Ionicons name="logo-whatsapp" size={18} color="#059669" style={{marginRight: 8}}/>
                 <Text style={styles.waBtnText}>{t('contact.whatsapp_btn')}</Text>
               </TouchableOpacity>

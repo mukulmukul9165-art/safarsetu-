@@ -8,8 +8,7 @@ import {
   FaMapMarkerAlt, FaCalendarAlt, FaClock, FaCar,
   FaChevronRight, FaHeadset,
   FaPhoneAlt, FaRoute, FaUserCircle, FaCreditCard,
-  FaPhone, FaChevronDown, FaChevronUp, FaCarSide, FaHistory,
-  FaCrosshairs, FaLocationArrow
+  FaPhone, FaChevronDown, FaChevronUp, FaCarSide, FaHistory
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import { api, postMapRoute } from '../../lib/api.js';
@@ -24,16 +23,9 @@ const createCustomIcon = (color) => L.divIcon({
 const pickupIcon = createCustomIcon('#22c55e'); // Green
 const dropIcon = createCustomIcon('#ef4444');   // Red
 
-const ChangeView = ({ center, routeCoords }) => {
+const ChangeView = ({ center }) => {
   const map = useMap();
-  useEffect(() => {
-    if (routeCoords && routeCoords.length >= 2) {
-      const bounds = L.latLngBounds(routeCoords);
-      map.fitBounds(bounds, { padding: [50, 50] });
-    } else {
-      map.setView(center, map.getZoom());
-    }
-  }, [map, center, routeCoords]);
+  map.setView(center, map.getZoom());
   return null;
 };
 
@@ -49,13 +41,12 @@ const ResizeMap = ({ trigger }) => {
 
 const BookingPage = ({ activeTab, user }) => {
   const { t } = useTranslation();
-  const [pickup, setPickup] = useState('');
-  const [drop, setDrop] = useState('');
+  const [pickup, setPickup] = useState('New Delhi Railway Station');
+  const [drop, setDrop] = useState('Gurgaon Cyber City');
   const [cars, setCars] = useState([]);
   const [selectedCar, setSelectedCar] = useState(null);
-  const [distance, setDistance] = useState(0);
-  const [routeCoords, setRouteCoords] = useState([]);
-  const [activeSelectionMode, setActiveSelectionMode] = useState(null); // 'pickup' or 'drop'
+  const [distance, setDistance] = useState(25);
+  const [routeCoords, setRouteCoords] = useState([[28.6139, 77.209], [28.4595, 77.0266]]);
   const [status, setStatus] = useState('idle');
   const [bookingDate, setBookingDate] = useState('');
   const [bookingTime, setBookingTime] = useState('');
@@ -63,83 +54,6 @@ const BookingPage = ({ activeTab, user }) => {
   const [allBookings, setAllBookings] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
   const routeTimer = useRef(null);
-
-  const fetchAddressName = async (lat, lng) => {
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`, {
-        headers: { 'Accept-Language': 'en' }
-      });
-      const data = await res.json();
-      if (data && data.address) {
-        const addr = data.address;
-        const place = addr.city || addr.town || addr.village || addr.suburb || addr.hamlet || addr.county || data.display_name.split(',')[0];
-        const state = addr.state ? `, ${addr.state}` : '';
-        return `${place}${state}`;
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  };
-
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported by your browser");
-      return;
-    }
-    const loadId = toast.loading("Fetching current location...");
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        const address = await fetchAddressName(latitude, longitude);
-        setPickup(address);
-        toast.dismiss(loadId);
-        toast.success("Current location set!");
-      },
-      (error) => {
-        toast.dismiss(loadId);
-        toast.error("Failed to get current location. Please enter manually.");
-      },
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-    );
-  };
-
-  const startMapSelection = (mode) => {
-    setActiveSelectionMode(mode);
-    toast.success(`Click anywhere on the map to set ${mode} location!`, {
-      icon: '📍',
-      duration: 4000
-    });
-  };
-
-  const MapEvents = () => {
-    const map = useMap();
-    useEffect(() => {
-      const handleMapClick = async (e) => {
-        const { lat, lng } = e.latlng;
-        if (activeSelectionMode === 'pickup') {
-          const loadId = toast.loading("Resolving pickup address...");
-          const address = await fetchAddressName(lat, lng);
-          setPickup(address);
-          setActiveSelectionMode(null);
-          toast.dismiss(loadId);
-          toast.success("Pickup location marked!");
-        } else if (activeSelectionMode === 'drop') {
-          const loadId = toast.loading("Resolving drop address...");
-          const address = await fetchAddressName(lat, lng);
-          setDrop(address);
-          setActiveSelectionMode(null);
-          toast.dismiss(loadId);
-          toast.success("Drop location marked!");
-        }
-      };
-      map.on('click', handleMapClick);
-      return () => {
-        map.off('click', handleMapClick);
-      };
-    }, [map, activeSelectionMode]);
-    return null;
-  };
 
   const displayName = user?.name || t('booking.rider_fallback');
 
@@ -170,7 +84,7 @@ const BookingPage = ({ activeTab, user }) => {
         const list = await api('/api/catalog/cars');
         if (!cancelled && Array.isArray(list) && list.length) {
           setCars(list);
-          // Do not select any category by default
+          setSelectedCar((prev) => prev || list[0]);
         }
       } catch {
         if (!cancelled) setCars([]);
@@ -386,35 +300,7 @@ const BookingPage = ({ activeTab, user }) => {
                       <div className="absolute left-0 top-0 bottom-0 w-12 flex items-center justify-center">
                          <div className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
                       </div>
-                      <input 
-                        type="text" 
-                        value={pickup || ''} 
-                        onChange={e => setPickup(e.target.value)} 
-                        className="input-field pl-12 pr-24 text-sm py-4 bg-dark/5 border-border hover:border-primary/30 transition-all" 
-                        placeholder={t('booking.enter_pickup')} 
-                      />
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 z-10">
-                        <button 
-                          type="button"
-                          onClick={useCurrentLocation}
-                          title="Use Current Location"
-                          className="w-8 h-8 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-dark transition-all flex items-center justify-center cursor-pointer"
-                        >
-                          <FaCrosshairs className="text-xs" />
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => startMapSelection('pickup')}
-                          title="Select on Map"
-                          className={`w-8 h-8 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
-                            activeSelectionMode === 'pickup'
-                              ? 'bg-primary text-dark shadow-lg shadow-primary/20 scale-110'
-                              : 'bg-dark/5 hover:bg-primary/20 text-muted hover:text-primary'
-                          }`}
-                        >
-                          <FaMapMarkerAlt className="text-xs" />
-                        </button>
-                      </div>
+                      <input type="text" value={pickup || ''} onChange={e => setPickup(e.target.value)} className="input-field pl-12 text-sm py-4 bg-dark/5 border-border hover:border-primary/30 transition-all" placeholder={t('booking.enter_pickup')} />
                     </div>
                   </div>
                   <div className="relative">
@@ -423,27 +309,7 @@ const BookingPage = ({ activeTab, user }) => {
                        <div className="absolute left-0 top-0 bottom-0 w-12 flex items-center justify-center">
                           <div className="w-2 h-2 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
                        </div>
-                       <input 
-                         type="text" 
-                         value={drop || ''} 
-                         onChange={e => setDrop(e.target.value)} 
-                         className="input-field pl-12 pr-14 text-sm py-4 bg-dark/5 border-border hover:border-red-500/30 transition-all" 
-                         placeholder={t('booking.enter_destination')} 
-                       />
-                       <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
-                         <button 
-                           type="button"
-                           onClick={() => startMapSelection('drop')}
-                           title="Select on Map"
-                           className={`w-8 h-8 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
-                             activeSelectionMode === 'drop'
-                               ? 'bg-red-500 text-white shadow-lg shadow-red-500/20 scale-110'
-                               : 'bg-dark/5 hover:bg-red-500/20 text-muted hover:text-red-500'
-                           }`}
-                         >
-                           <FaMapMarkerAlt className="text-xs" />
-                         </button>
-                       </div>
+                       <input type="text" value={drop || ''} onChange={e => setDrop(e.target.value)} className="input-field pl-12 text-sm py-4 bg-dark/5 border-border hover:border-red-500/30 transition-all" placeholder={t('booking.enter_destination')} />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -523,45 +389,18 @@ const BookingPage = ({ activeTab, user }) => {
             <MapContainer
               center={mapCenter}
               zoom={11}
-              scrollWheelZoom={true}
-              dragging={true}
-              touchZoom={true}
-              doubleClickZoom={true}
-              zoomControl={true}
               className="w-full h-full z-10"
               style={{ height: '100%', width: '100%', background: 'white' }}
             >
               <TileLayer 
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
+                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" 
               />
-              <ChangeView center={mapCenter} routeCoords={routeCoords} />
+              <ChangeView center={mapCenter} />
               <ResizeMap trigger={showMobilePanel} />
-              <MapEvents />
-              {routeCoords.length > 0 && (
-                <>
-                  <Marker position={routeCoords[0]} icon={pickupIcon}>
-                    <Popup>{t('booking.pickup_popup', { location: pickup })}</Popup>
-                  </Marker>
-                  <Marker position={routeCoords[routeCoords.length - 1]} icon={dropIcon}>
-                    <Popup>{t('booking.drop_popup', { location: drop })}</Popup>
-                  </Marker>
-                  {/* Bottom Thick Glow Shadow Line */}
-                  <Polyline 
-                    positions={routeCoords} 
-                    color="#1557B0" 
-                    weight={8} 
-                    opacity={0.3} 
-                  />
-                  {/* Top Premium Google Maps Blue Route Line */}
-                  <Polyline 
-                    positions={routeCoords} 
-                    color="#1A73E8" 
-                    weight={5} 
-                    opacity={0.95} 
-                  />
-                </>
-              )}
+              <Marker position={routeCoords[0]} icon={pickupIcon}><Popup>{t('booking.pickup_popup', { location: pickup })}</Popup></Marker>
+              <Marker position={routeCoords[routeCoords.length - 1]} icon={dropIcon}><Popup>{t('booking.drop_popup', { location: drop })}</Popup></Marker>
+              <Polyline positions={routeCoords} color="#FFD600" weight={5} opacity={0.6} dashArray="10, 10" />
             </MapContainer>
 
             {/* Floating Fare Card */}

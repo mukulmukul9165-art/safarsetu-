@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -13,61 +12,131 @@ import {
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
+import LocationPickerModal from '../shared/LocationPickerModal';
 
 const { width, height } = Dimensions.get('window');
 
 export default function BookRideScreen({ navigation }) {
+  // Location states — store both name & coordinates
   const [pickup, setPickup] = useState('');
+  const [pickupCoords, setPickupCoords] = useState(null); // { latitude, longitude }
   const [drop, setDrop] = useState('');
+  const [dropCoords, setDropCoords] = useState(null);
+
+  // Modal visibility
+  const [pickupModalVisible, setPickupModalVisible] = useState(false);
+  const [dropModalVisible, setDropModalVisible] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
-  
+
+  // Date & Time states
+  const [bookingDate, setBookingDate] = useState('');
+  const [bookingTime, setBookingTime] = useState('');
+
+  // Fleet categories & selection
+  const [cars, setCars] = useState([]);
+  const [selectedCar, setSelectedCar] = useState(null);
+
+  // Search status overlay
+  const [status, setStatus] = useState('idle'); // 'idle' | 'searching'
+  const [currentBookingId, setCurrentBookingId] = useState(null);
+
   // Route details
   const [routeInfo, setRouteInfo] = useState(null);
-  const [selectedCar, setSelectedCar] = useState('Mini');
 
-  const carCategories = [
-    { name: 'Mini', baseRate: 12, icon: '🚗', seats: 4 },
-    { name: 'Sedan', baseRate: 15, icon: '🚘', seats: 4 },
-    { name: 'SUV', baseRate: 20, icon: '🚙', seats: 6 },
+  const defaultCarCategories = [
+    { id: 1, name: 'Mini', pricePerKm: 12, seats: 4, eta: '3 mins', image: '🚗' },
+    { id: 2, name: 'Sedan', pricePerKm: 15, seats: 4, eta: '5 mins', image: '🚘' },
+    { id: 3, name: 'SUV', pricePerKm: 20, seats: 6, eta: '6 mins', image: '🚙' },
   ];
 
-  // Geocode and calculate route coordinates
+  // Fetch cars on mount
+  useEffect(() => {
+    const fetchCars = async () => {
+      try {
+        const res = await api.get('/api/catalog/cars');
+        if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+          setCars(res.data);
+          setSelectedCar(res.data[0]);
+        } else {
+          setCars(defaultCarCategories);
+          setSelectedCar(defaultCarCategories[0]);
+        }
+      } catch {
+        setCars(defaultCarCategories);
+        setSelectedCar(defaultCarCategories[0]);
+      }
+    };
+
+    fetchCars();
+
+    // Default booking date & time
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+    const timeStr = today.toTimeString().split(' ')[0].substring(0, 5);
+    setBookingDate(dateStr);
+    setBookingTime(timeStr);
+  }, []);
+
+  // Calculate route — uses coordinates if available, else text
   const calculateRoute = async () => {
     if (!pickup.trim() || !drop.trim()) {
-      Alert.alert('Incomplete Fields', 'Please enter both pickup and drop locations.');
+      Alert.alert('Incomplete Fields', 'Please select both pickup and drop locations.');
       return;
     }
 
     setCalculating(true);
     setRouteInfo(null);
+
     try {
-      // Direct mock API call or resolve through backend
-      // We can hit backend `/api/bookings` helper using post route parameters
-      // In web app, we hit `/api/maps/route` which does reverse geocoding via Nominatim!
-      // Let's call the Nominatim search or map endpoint!
-      const res = await api.post('/api/maps/route', { pickup, drop });
+      const payload = { pickup, drop };
+
+      // If we have exact coordinates, pass them directly (more accurate)
+      if (pickupCoords) {
+        payload.pickupLat = pickupCoords.latitude;
+        payload.pickupLng = pickupCoords.longitude;
+      }
+      if (dropCoords) {
+        payload.dropLat = dropCoords.latitude;
+        payload.dropLng = dropCoords.longitude;
+      }
+
+      const res = await api.post('/api/maps/route', payload);
       const { pickup: p, drop: d, coordinates, distanceKm } = res.data;
-      
+
       setRouteInfo({
         pickupCoords: { latitude: p.lat, longitude: p.lng },
         dropCoords: { latitude: d.lat, longitude: d.lng },
         coordinates: coordinates.map(c => ({ latitude: c[0], longitude: c[1] })),
         distance: distanceKm,
       });
-    } catch (e) {
-      console.error(e);
-      // Fallback calculations for simulation if Nominatim is busy
-      const dummyDistance = 15.4;
-      setRouteInfo({
-        pickupCoords: { latitude: 22.0248, longitude: 74.8964 }, // Barwani
-        dropCoords: { latitude: 22.9676, longitude: 76.0534 },   // Dewas
-        coordinates: [
-          { latitude: 22.0248, longitude: 74.8964 },
-          { latitude: 22.9676, longitude: 76.0534 }
-        ],
-        distance: dummyDistance,
-      });
+    } catch {
+      // Fallback: if we have coordinates, compute a straight-line estimate
+      if (pickupCoords && dropCoords) {
+        const dlat = pickupCoords.latitude - dropCoords.latitude;
+        const dlng = pickupCoords.longitude - dropCoords.longitude;
+        const straightLineKm = Math.sqrt(dlat * dlat + dlng * dlng) * 111;
+        const estimatedKm = Math.round(straightLineKm * 1.3 * 10) / 10; // road factor ~1.3x
+
+        setRouteInfo({
+          pickupCoords,
+          dropCoords,
+          coordinates: [pickupCoords, dropCoords],
+          distance: estimatedKm,
+        });
+      } else {
+        // Last resort fallback
+        setRouteInfo({
+          pickupCoords: { latitude: 22.0248, longitude: 74.8964 },
+          dropCoords: { latitude: 22.9676, longitude: 76.0534 },
+          coordinates: [
+            { latitude: 22.0248, longitude: 74.8964 },
+            { latitude: 22.9676, longitude: 76.0534 },
+          ],
+          distance: 15.4,
+        });
+      }
     } finally {
       setCalculating(false);
     }
@@ -75,25 +144,28 @@ export default function BookRideScreen({ navigation }) {
 
   const handleBooking = async () => {
     if (!routeInfo) {
-      Alert.alert('Route Required', 'Please enter locations and calculate your route first.');
+      Alert.alert('Route Required', 'Please select locations and estimate route first.');
+      return;
+    }
+    if (!bookingDate.trim() || !bookingTime.trim()) {
+      Alert.alert('Date & Time Required', 'Please specify scheduling date and time.');
+      return;
+    }
+    if (!selectedCar) {
+      Alert.alert('Vehicle Required', 'Please choose your preferred ride category.');
       return;
     }
 
     setLoading(true);
     try {
-      const activeCar = carCategories.find(c => c.name === selectedCar);
-      const fare = Math.round(routeInfo.distance * activeCar.baseRate);
-
-      const today = new Date();
-      const bookingDate = today.toISOString().split('T')[0];
-      const bookingTime = today.toTimeString().split(' ')[0].substring(0, 5);
+      const fare = Math.round(routeInfo.distance * (selectedCar.pricePerKm || selectedCar.baseRate || 12));
 
       const bookingPayload = {
         pickup,
         drop,
         bookingDate,
         bookingTime,
-        carName: selectedCar,
+        carName: selectedCar.name,
         fare,
         pickupLat: routeInfo.pickupCoords.latitude,
         pickupLng: routeInfo.pickupCoords.longitude,
@@ -103,14 +175,11 @@ export default function BookRideScreen({ navigation }) {
         distanceKm: routeInfo.distance,
       };
 
-      await api.post('/api/bookings', bookingPayload);
+      const res = await api.post('/api/bookings', bookingPayload);
+      const bookingData = res.data;
+      setCurrentBookingId(bookingData.id);
       setLoading(false);
-
-      Alert.alert(
-        'Booking Confirmed! 🎉',
-        `Your SafarSetu ride (${selectedCar}) has been successfully scheduled! An elite driver will be assigned shortly.`,
-        [{ text: 'Great!', onPress: () => navigation.navigate('Dashboard') }]
-      );
+      setStatus('searching');
     } catch (e) {
       setLoading(false);
       const msg = e.response?.data?.message || 'Failed to create booking.';
@@ -118,42 +187,56 @@ export default function BookRideScreen({ navigation }) {
     }
   };
 
+  const handleCancelRequest = async () => {
+    if (!currentBookingId) { setStatus('idle'); return; }
+    setLoading(true);
+    try {
+      await api.patch(`/api/bookings/${currentBookingId}`, { status: 'Cancelled' });
+      setStatus('idle');
+      Alert.alert('Cancelled', 'Your booking request has been successfully cancelled.');
+    } catch {
+      setStatus('idle');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const setPresetTime = (offsetHours) => {
+    const d = new Date();
+    if (offsetHours > 0) d.setHours(d.getHours() + offsetHours);
+    if (offsetHours === 24) d.setDate(d.getDate() + 1);
+    setBookingDate(d.toISOString().split('T')[0]);
+    setBookingTime(d.toTimeString().split(' ')[0].substring(0, 5));
+  };
+
+  // Computed map region when route is available
+  const mapRegion = routeInfo
+    ? {
+        latitude: (routeInfo.pickupCoords.latitude + routeInfo.dropCoords.latitude) / 2,
+        longitude: (routeInfo.pickupCoords.longitude + routeInfo.dropCoords.longitude) / 2,
+        latitudeDelta: Math.abs(routeInfo.pickupCoords.latitude - routeInfo.dropCoords.latitude) * 1.8 + 0.05,
+        longitudeDelta: Math.abs(routeInfo.pickupCoords.longitude - routeInfo.dropCoords.longitude) * 1.8 + 0.05,
+      }
+    : {
+        latitude: pickupCoords ? pickupCoords.latitude : 22.7196,
+        longitude: pickupCoords ? pickupCoords.longitude : 75.8577,
+        latitudeDelta: 3,
+        longitudeDelta: 3,
+      };
+
   return (
     <View style={styles.container}>
-      {/* ── MAP CONTAINER ── */}
+      {/* ── MAP ── */}
       <View style={styles.mapContainer}>
         <MapView
           provider={PROVIDER_DEFAULT}
           style={styles.map}
-          initialRegion={{
-            latitude: 22.0248,
-            longitude: 74.8964,
-            latitudeDelta: 0.5,
-            longitudeDelta: 0.5,
-          }}
-          region={
-            routeInfo
-              ? {
-                  latitude: (routeInfo.pickupCoords.latitude + routeInfo.dropCoords.latitude) / 2,
-                  longitude: (routeInfo.pickupCoords.longitude + routeInfo.dropCoords.longitude) / 2,
-                  latitudeDelta: Math.abs(routeInfo.pickupCoords.latitude - routeInfo.dropCoords.latitude) * 1.5 || 0.1,
-                  longitudeDelta: Math.abs(routeInfo.pickupCoords.longitude - routeInfo.dropCoords.longitude) * 1.5 || 0.1,
-                }
-              : undefined
-          }
+          region={mapRegion}
         >
           {routeInfo && (
             <>
-              <Marker
-                coordinate={routeInfo.pickupCoords}
-                title="Pickup Point"
-                pinColor="#22C55E"
-              />
-              <Marker
-                coordinate={routeInfo.dropCoords}
-                title="Drop Point"
-                pinColor="#EF4444"
-              />
+              <Marker coordinate={routeInfo.pickupCoords} title="Pickup" pinColor="#22C55E" />
+              <Marker coordinate={routeInfo.dropCoords} title="Drop" pinColor="#EF4444" />
               <Polyline
                 coordinates={routeInfo.coordinates}
                 strokeColor={COLORS.primaryDark}
@@ -161,40 +244,65 @@ export default function BookRideScreen({ navigation }) {
               />
             </>
           )}
+          {!routeInfo && pickupCoords && (
+            <Marker coordinate={pickupCoords} title="Pickup" pinColor="#22C55E" />
+          )}
+          {!routeInfo && dropCoords && (
+            <Marker coordinate={dropCoords} title="Drop" pinColor="#EF4444" />
+          )}
         </MapView>
       </View>
 
-      {/* ── BOOKING CONTROL PANEL ── */}
+      {/* ── CONTROL PANEL ── */}
       <View style={styles.controlPanel}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent}>
-          
+
+          {/* Pickup / Drop location selector buttons */}
           <View style={styles.inputsCard}>
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputIndicator}>🟢</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Enter pickup point (e.g. Barwani)"
-                placeholderTextColor={COLORS.textMuted}
-                value={pickup}
-                onChangeText={setPickup}
-              />
-            </View>
-            <View style={styles.separator} />
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputIndicator}>🔴</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Enter drop point (e.g. Dewas)"
-                placeholderTextColor={COLORS.textMuted}
-                value={drop}
-                onChangeText={setDrop}
-              />
-            </View>
-            
+            {/* PICKUP */}
             <TouchableOpacity
-              style={styles.calculateBtn}
+              style={styles.locationRow}
+              onPress={() => setPickupModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.locationDot}>🟢</Text>
+              <View style={styles.locationTextWrap}>
+                <Text style={styles.locationLabel}>PICKUP</Text>
+                <Text
+                  style={[styles.locationValue, !pickup && styles.locationPlaceholder]}
+                  numberOfLines={1}
+                >
+                  {pickup || 'Tap to select pickup location'}
+                </Text>
+              </View>
+              <Text style={styles.locationArrow}>›</Text>
+            </TouchableOpacity>
+
+            <View style={styles.separator} />
+
+            {/* DROP */}
+            <TouchableOpacity
+              style={styles.locationRow}
+              onPress={() => setDropModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.locationDot}>🔴</Text>
+              <View style={styles.locationTextWrap}>
+                <Text style={styles.locationLabel}>DROP</Text>
+                <Text
+                  style={[styles.locationValue, !drop && styles.locationPlaceholder]}
+                  numberOfLines={1}
+                >
+                  {drop || 'Tap to select drop location'}
+                </Text>
+              </View>
+              <Text style={styles.locationArrow}>›</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.calculateBtn, (!pickup || !drop) && styles.calculateBtnDisabled]}
               onPress={calculateRoute}
-              disabled={calculating}
+              disabled={calculating || !pickup || !drop}
             >
               {calculating ? (
                 <ActivityIndicator color={COLORS.white} />
@@ -204,26 +312,58 @@ export default function BookRideScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
+          {/* Schedule Ride */}
+          <Text style={styles.sectionHeader}>Schedule Ride</Text>
+          <View style={styles.dateTimeGrid}>
+            <View style={styles.dateTimeField}>
+              <Text style={styles.dateTimeLabel}>DATE (YYYY-MM-DD)</Text>
+              <TouchableOpacity style={styles.dateTimeInput} onPress={() => {}}>
+                <Text style={styles.dateTimeValue}>{bookingDate}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.dateTimeField}>
+              <Text style={styles.dateTimeLabel}>TIME (HH:MM)</Text>
+              <TouchableOpacity style={styles.dateTimeInput} onPress={() => {}}>
+                <Text style={styles.dateTimeValue}>{bookingTime}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Preset time CTAs */}
+          <View style={styles.presetsRow}>
+            <TouchableOpacity style={styles.presetChip} onPress={() => setPresetTime(0)}>
+              <Text style={styles.presetChipText}>🔥 Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.presetChip} onPress={() => setPresetTime(1)}>
+              <Text style={styles.presetChipText}>⏱️ +1 Hr</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.presetChip} onPress={() => setPresetTime(24)}>
+              <Text style={styles.presetChipText}>📅 Tomorrow</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Route details + car selector (only after estimate) */}
           {routeInfo && (
             <View style={styles.routeDetailsContainer}>
-              <Text style={styles.distanceLabel}>
-                Route Distance: <Text style={styles.distanceVal}>{routeInfo.distance.toFixed(1)} km</Text>
-              </Text>
-              
+              <View style={styles.distanceRow}>
+                <Text style={styles.distanceBadge}>📏 {routeInfo.distance.toFixed(1)} km</Text>
+                <Text style={styles.distanceNote}>(estimated road distance)</Text>
+              </View>
+
               <Text style={styles.sectionHeader}>Select Premium Fleet Category</Text>
               <View style={styles.carsRow}>
-                {carCategories.map((car) => {
-                  const active = selectedCar === car.name;
-                  const estimatedFare = Math.round(routeInfo.distance * car.baseRate);
+                {cars.map((car) => {
+                  const active = selectedCar && selectedCar.id === car.id;
+                  const estimatedFare = Math.round(routeInfo.distance * (car.pricePerKm || car.baseRate || 12));
                   return (
                     <TouchableOpacity
-                      key={car.name}
+                      key={car.id}
                       style={[styles.carCard, active && styles.activeCarCard]}
-                      onPress={() => setSelectedCar(car.name)}
+                      onPress={() => setSelectedCar(car)}
                     >
-                      <Text style={styles.carIcon}>{car.icon}</Text>
+                      <Text style={styles.carIcon}>{car.image || '🚗'}</Text>
                       <Text style={styles.carName}>{car.name}</Text>
-                      <Text style={styles.carSeats}>{car.seats} Seats</Text>
+                      <Text style={styles.carSeats}>{car.seats || 4} Seats</Text>
                       <Text style={styles.carFare}>₹{estimatedFare}</Text>
                     </TouchableOpacity>
                   );
@@ -246,6 +386,55 @@ export default function BookRideScreen({ navigation }) {
 
         </ScrollView>
       </View>
+
+      {/* ── SEARCHING OVERLAY ── */}
+      {status === 'searching' && (
+        <View style={styles.searchOverlay}>
+          <View style={styles.searchCard}>
+            <ActivityIndicator size="large" color={COLORS.primary} style={styles.searchSpinner} />
+            <Text style={styles.searchTitle}>FINDING YOUR DRIVER</Text>
+            <Text style={styles.searchSubtitle}>
+              Connecting with premium fleet pilots near you. An elite driver will accept shortly.
+            </Text>
+            <View style={styles.searchProgress}>
+              <Text style={styles.progressText}>🚀 Allocating luxury concierge pilot...</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.cancelRequestBtn}
+              onPress={handleCancelRequest}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={COLORS.danger} />
+              ) : (
+                <Text style={styles.cancelRequestText}>CANCEL RIDE REQUEST</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* ── LOCATION PICKER MODALS ── */}
+      <LocationPickerModal
+        visible={pickupModalVisible}
+        onClose={() => setPickupModalVisible(false)}
+        title="Select Pickup Location"
+        onSelect={(name, lat, lng) => {
+          setPickup(name);
+          setPickupCoords({ latitude: lat, longitude: lng });
+          setRouteInfo(null); // reset route when location changes
+        }}
+      />
+      <LocationPickerModal
+        visible={dropModalVisible}
+        onClose={() => setDropModalVisible(false)}
+        title="Select Drop Location"
+        onSelect={(name, lat, lng) => {
+          setDrop(name);
+          setDropCoords({ latitude: lat, longitude: lng });
+          setRouteInfo(null);
+        }}
+      />
     </View>
   );
 }
@@ -256,7 +445,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   mapContainer: {
-    height: height * 0.4,
+    height: height * 0.35,
     width: width,
   },
   map: {
@@ -265,19 +454,19 @@ const styles = StyleSheet.create({
   controlPanel: {
     flex: 1,
     backgroundColor: COLORS.card,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     marginTop: -24,
     borderWidth: 1,
     borderColor: COLORS.border,
     shadowColor: COLORS.text,
-    shadowOffset: { width: 0, height: -10 },
+    shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.05,
-    shadowRadius: 15,
+    shadowRadius: 14,
     elevation: 10,
   },
   scrollContent: {
-    padding: 24,
+    padding: 20,
     paddingBottom: 40,
   },
   inputsCard: {
@@ -285,36 +474,58 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: 16,
-    marginBottom: 20,
+    padding: 4,
+    marginBottom: 16,
+    overflow: 'hidden',
   },
-  inputWrapper: {
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    padding: 14,
+    gap: 10,
   },
-  inputIndicator: {
+  locationDot: {
     fontSize: 14,
   },
-  textInput: {
+  locationTextWrap: {
     flex: 1,
+  },
+  locationLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: COLORS.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  locationValue: {
     fontSize: 14,
+    fontWeight: '700',
     color: COLORS.text,
-    fontWeight: '600',
-    paddingVertical: 10,
+  },
+  locationPlaceholder: {
+    color: COLORS.textMuted,
+    fontWeight: '500',
+  },
+  locationArrow: {
+    fontSize: 20,
+    color: COLORS.textMuted,
+    fontWeight: '300',
   },
   separator: {
     height: 1,
     backgroundColor: COLORS.border,
-    marginVertical: 10,
-    marginLeft: 26,
+    marginHorizontal: 14,
   },
   calculateBtn: {
     backgroundColor: COLORS.primaryDark,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
+    margin: 12,
     marginTop: 14,
+  },
+  calculateBtnDisabled: {
+    backgroundColor: COLORS.border,
   },
   calculateBtnText: {
     color: COLORS.white,
@@ -322,31 +533,91 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0.5,
   },
-  routeDetailsContainer: {
-    marginTop: 6,
-  },
-  distanceLabel: {
-    fontSize: 13,
-    fontWeight: '700',
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: '900',
     color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 10,
+    marginLeft: 4,
+  },
+  dateTimeGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  dateTimeField: {
+    flex: 1,
+  },
+  dateTimeLabel: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+    marginBottom: 6,
+    marginLeft: 4,
+  },
+  dateTimeInput: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  dateTimeValue: {
+    fontSize: 12,
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  presetsRow: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 20,
   },
-  distanceVal: {
-    color: COLORS.text,
-    fontWeight: '900',
+  presetChip: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
   },
-  sectionHeader: {
+  presetChipText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  routeDetailsContainer: {
+    marginTop: 4,
+  },
+  distanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  distanceBadge: {
     fontSize: 13,
     fontWeight: '900',
-    color: COLORS.text,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 14,
+    color: COLORS.primaryDark,
+    backgroundColor: 'rgba(232, 179, 75, 0.1)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(232, 179, 75, 0.2)',
+  },
+  distanceNote: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    fontWeight: '600',
   },
   carsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   carCard: {
     flex: 1,
@@ -361,27 +632,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     backgroundColor: 'rgba(232, 179, 75, 0.08)',
   },
-  carIcon: {
-    fontSize: 26,
-    marginBottom: 4,
-  },
-  carName: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: COLORS.text,
-  },
-  carSeats: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
-  carFare: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: COLORS.primaryDark,
-    marginTop: 6,
-  },
+  carIcon: { fontSize: 26, marginBottom: 4 },
+  carName: { fontSize: 12, fontWeight: '900', color: COLORS.text },
+  carSeats: { fontSize: 9, fontWeight: '700', color: COLORS.textMuted, marginTop: 2 },
+  carFare: { fontSize: 14, fontWeight: '900', color: COLORS.primaryDark, marginTop: 6 },
   bookButton: {
     backgroundColor: COLORS.primary,
     borderRadius: 14,
@@ -397,6 +651,68 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '900',
     fontSize: 14,
+    letterSpacing: 0.5,
+  },
+  searchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(30,30,30,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    zIndex: 999,
+  },
+  searchCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: 'rgba(232,179,75,0.3)',
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  searchSpinner: { marginBottom: 20 },
+  searchTitle: {
+    fontSize: 18,
+    fontWeight: '950',
+    color: COLORS.text,
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  searchSubtitle: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+    fontWeight: '600',
+    marginBottom: 20,
+  },
+  searchProgress: {
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  progressText: {
+    fontSize: 11,
+    color: COLORS.primaryDark,
+    fontWeight: '800',
+  },
+  cancelRequestBtn: {
+    borderWidth: 1.5,
+    borderColor: COLORS.danger,
+    borderRadius: 12,
+    paddingVertical: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  cancelRequestText: {
+    color: COLORS.danger,
+    fontWeight: '900',
+    fontSize: 11,
     letterSpacing: 0.5,
   },
 });

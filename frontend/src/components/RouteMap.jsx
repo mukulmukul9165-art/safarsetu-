@@ -1,6 +1,6 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -43,33 +43,17 @@ const RouteMap = ({
       ? Number(distanceKm).toFixed(1)
       : '—';
 
-  const ChangeViewAndBounds = () => {
-    const map = useMap();
-    useEffect(() => {
-      if (positions && positions.length >= 2) {
-        const bounds = L.latLngBounds(positions);
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }
-    }, [map]);
-    return null;
-  };
-
   return (
     <div className="w-full h-full min-h-[260px] rounded-2xl overflow-hidden relative border border-border shadow-2xl">
       <MapContainer
         center={center}
         zoom={13}
-        scrollWheelZoom={true}
-        dragging={true}
-        touchZoom={true}
-        doubleClickZoom={true}
-        zoomControl={true}
+        scrollWheelZoom={false}
         style={{ height: '100%', width: '100%', minHeight: '260px' }}
       >
-        <ChangeViewAndBounds />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
         <Marker position={pickupCoords} icon={pickupIcon}>
@@ -84,20 +68,7 @@ const RouteMap = ({
           </Popup>
         </Marker>
 
-        {/* Bottom Thick Glow Shadow Line */}
-        <Polyline 
-          positions={positions} 
-          color="#1557B0" 
-          weight={8} 
-          opacity={0.3} 
-        />
-        {/* Top Premium Google Maps Blue Route Line */}
-        <Polyline 
-          positions={positions} 
-          color="#1A73E8" 
-          weight={5} 
-          opacity={0.95} 
-        />
+        <Polyline positions={positions} color="#FFD600" weight={4} opacity={0.8} dashArray="10, 10" />
       </MapContainer>
 
       <div className="absolute top-3 left-3 sm:top-6 sm:left-6 z-[1000] p-2.5 sm:p-4 glass-card border-primary/30 pointer-events-none">

@@ -53,7 +53,6 @@ function parseKm(distanceStr) {
 
 const AdminDashboard = ({ activeTab }) => {
   const { t } = useTranslation();
-  const [dashboardStats, setDashboardStats] = useState(null);
 
   const translateStatus = (status) => {
     const map = {
@@ -70,7 +69,7 @@ const AdminDashboard = ({ activeTab }) => {
     return map[status] ? t(map[status]) : status;
   };
 
-  const revenueData = dashboardStats?.revenueData || [
+  const revenueData = [
     { name: t('admin.day_mon'), revenue: 2400, commission: 288, driverPay: 2112 },
     { name: t('admin.day_tue'), revenue: 1398, commission: 167, driverPay: 1231 },
     { name: t('admin.day_wed'), revenue: 9800, commission: 1176, driverPay: 8624 },
@@ -80,13 +79,13 @@ const AdminDashboard = ({ activeTab }) => {
     { name: t('admin.day_sun'), revenue: 4300, commission: 516, driverPay: 3784 },
   ];
 
-  const pieData = dashboardStats?.pieData || [
+  const pieData = [
     { name: t('admin.pie_completed'), value: 85, color: '#22c55e' },
     { name: t('admin.pie_pending'), value: 10, color: '#eab308' },
     { name: t('admin.pie_cancelled'), value: 5, color: '#ef4444' },
   ];
 
-  const operationalMetrics = dashboardStats?.operationalMetrics || [
+  const operationalMetrics = [
     { labelKey: 'admin.booking_success_rate', val: '98%', color: 'bg-green-500' },
     { labelKey: 'admin.driver_response_time', val: '2.5m', color: 'bg-primary' },
     { labelKey: 'admin.customer_satisfaction', val: '4.8/5', color: 'bg-blue-500' },
@@ -162,20 +161,18 @@ const AdminDashboard = ({ activeTab }) => {
 
   const loadAll = async () => {
     try {
-      const [bookings, d, c, carsData, pay, statsData] = await Promise.all([
+      const [bookings, d, c, carsData, pay] = await Promise.all([
         api('/api/bookings'),
         api('/api/admin/drivers'),
         api('/api/admin/customers'),
         api('/api/admin/cars'),
         api('/api/admin/payments'),
-        api('/api/admin/dashboard-stats'),
       ]);
       setAllBookings(Array.isArray(bookings) ? bookings : []);
       setDrivers(Array.isArray(d) ? d : []);
       setCustomers(Array.isArray(c) ? c : []);
       setAdminCars(Array.isArray(carsData) ? carsData : []);
       setPayments(Array.isArray(pay) ? pay : []);
-      setDashboardStats(statsData);
     } catch (e) {
       toast.error(e.message || 'Failed to load admin data');
     }
@@ -202,8 +199,8 @@ const AdminDashboard = ({ activeTab }) => {
   const stats = [
     { label: t('nav.bookings'), value: allBookings.length, icon: <FaClock />, color: "text-blue-500", trend: "+12%" },
     { label: t('admin.driver_approvals'), value: drivers.filter(d => d.approvalStatus === 'Approved').length, icon: <FaCar />, color: "text-yellow-500", trend: "+2" },
-    { label: t('admin.total_commissions'), value: dashboardStats ? `₹${dashboardStats.totalCommissions.toLocaleString()}` : "₹5,433", icon: <FaWallet />, color: "text-primary", trend: "+12%" },
-    { label: t('admin.wallet_balance'), value: dashboardStats ? `₹${dashboardStats.walletBalance.toLocaleString()}` : "₹1,24,500", icon: <FaMoneyBillWave />, color: "text-green-500", trend: "+18%" },
+    { label: t('admin.total_commissions'), value: "₹5,433", icon: <FaWallet />, color: "text-primary", trend: "+12%" },
+    { label: t('admin.wallet_balance'), value: "₹1,24,500", icon: <FaMoneyBillWave />, color: "text-green-500", trend: "+18%" },
   ];
 
   const handleApproveDriver = async (id) => {
@@ -791,39 +788,12 @@ const AdminDashboard = ({ activeTab }) => {
 
         {activeTab === 'Payments' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card p-4 sm:p-8">
-             <div className="flex flex-wrap justify-between items-center gap-4 mb-8 sm:mb-12">
-                <h3 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter text-foreground">{t('admin.transaction_log')}</h3>
-                <div className="bg-primary/10 border border-primary/20 px-4 sm:px-6 py-2.5 sm:py-3 rounded-2xl">
-                   <p className="text-[9px] text-primary uppercase font-black mb-1">{t('admin.wallet_balance')}</p>
-                   <p className="text-xl sm:text-2xl font-black text-foreground">{dashboardStats ? `₹${dashboardStats.walletBalance.toLocaleString()}` : "₹1,24,500"}</p>
-                </div>
-             </div>
+             <div className="flex flex-wrap justify-between items-center gap-4 mb-8 sm:mb-12"><h3 className="text-xl sm:text-2xl font-black italic uppercase tracking-tighter text-foreground">{t('admin.transaction_log')}</h3><div className="bg-primary/10 border border-primary/20 px-4 sm:px-6 py-2.5 sm:py-3 rounded-2xl"><p className="text-[9px] text-primary uppercase font-black mb-1">{t('admin.wallet_balance')}</p><p className="text-xl sm:text-2xl font-black text-foreground">₹1,24,500</p></div></div>
              <div className="space-y-4">
                 {payments.map(p => (
-                   <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 sm:p-6 bg-muted/10 rounded-2xl sm:rounded-3xl border border-border hover:border-primary/20 transition-all group gap-4">
-                    <div className="flex items-center gap-4 sm:gap-6">
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 bg-green-500/10 rounded-xl sm:rounded-2xl flex items-center justify-center text-green-600 text-xl group-hover:bg-primary/10 group-hover:text-primary transition-all shrink-0">
-                        <FaCreditCard />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-black text-sm sm:text-lg text-foreground truncate max-w-[200px] sm:max-w-none">
-                          {t('admin.trip_payment', { id: p.bookingId ? (p.bookingId.length > 10 ? `#${p.bookingId.slice(-6)}` : p.bookingId) : '' })}
-                        </p>
-                        <p className="text-[10px] sm:text-xs text-muted uppercase font-bold tracking-widest truncate">
-                          {p.customer} • {p.date}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-row sm:flex-row items-center justify-between sm:justify-end gap-6 sm:gap-12 text-left sm:text-right border-t border-border/50 pt-3 sm:pt-0 sm:border-0 w-full sm:w-auto">
-                      <div>
-                        <p className="text-[8px] sm:text-[9px] text-muted uppercase font-black">{t('admin.split')}</p>
-                        <p className="text-[10px] sm:text-xs text-foreground font-bold">{t('admin.split_detail', { admin: Math.floor(p.amount * 0.12), driver: p.amount - Math.floor(p.amount * 0.12) })}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xl sm:text-2xl font-black text-primary">₹{p.amount}</p>
-                        <p className="text-[9px] sm:text-[10px] text-muted uppercase font-black">{p.method}</p>
-                      </div>
-                    </div>
+                   <div key={p.id} className="flex flex-col md:flex-row md:items-center justify-between p-6 bg-muted/10 rounded-3xl border border-border hover:border-primary/20 transition-all group">
+                    <div className="flex items-center gap-6 mb-4 md:mb-0"><div className="w-14 h-14 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-600 text-xl group-hover:bg-primary/10 group-hover:text-primary transition-all"><FaCreditCard /></div><div><p className="font-black text-lg text-foreground">{t('admin.trip_payment', { id: p.bookingId })}</p><p className="text-xs text-muted uppercase font-bold tracking-widest">{p.customer} • {p.date}</p></div></div>
+                    <div className="flex items-center gap-12 text-right"><div className="hidden lg:block"><p className="text-[9px] text-muted uppercase font-black">{t('admin.split')}</p><p className="text-xs text-foreground font-bold">{t('admin.split_detail', { admin: Math.floor(p.amount * 0.12), driver: p.amount - Math.floor(p.amount * 0.12) })}</p></div><div><p className="text-2xl font-black text-primary">₹{p.amount}</p><p className="text-[10px] text-muted uppercase font-black">{p.method}</p></div></div>
                   </div>
                 ))}
              </div>
@@ -833,8 +803,8 @@ const AdminDashboard = ({ activeTab }) => {
         {activeTab === 'Reports' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
-                <div className="glass-card p-5 sm:p-8 text-center"><p className="text-[9px] sm:text-[10px] text-muted uppercase font-black mb-2">{t('admin.total_commissions')}</p><p className="text-2xl sm:text-4xl font-black text-primary">₹{dashboardStats ? dashboardStats.totalCommissions.toLocaleString() : "5,433"}</p><div className="mt-3 flex items-center justify-center gap-2 text-xs text-green-600 font-bold"><FaArrowUp /> {t('admin.vs_last_month', { percent: 12 })}</div></div>
-                <div className="glass-card p-5 sm:p-8 text-center"><p className="text-[9px] sm:text-[10px] text-muted uppercase font-black mb-2">{t('admin.driver_payouts')}</p><p className="text-2xl sm:text-4xl font-black text-green-600">₹{dashboardStats ? Math.round(dashboardStats.totalCommissions / 0.12 * 0.88).toLocaleString() : "39,847"}</p><div className="mt-3 flex items-center justify-center gap-2 text-xs text-green-600 font-bold"><FaArrowUp /> {t('admin.vs_last_month', { percent: 8 })}</div></div>
+                <div className="glass-card p-5 sm:p-8 text-center"><p className="text-[9px] sm:text-[10px] text-muted uppercase font-black mb-2">{t('admin.total_commissions')}</p><p className="text-2xl sm:text-4xl font-black text-primary">₹5,433</p><div className="mt-3 flex items-center justify-center gap-2 text-xs text-green-600 font-bold"><FaArrowUp /> {t('admin.vs_last_month', { percent: 12 })}</div></div>
+                <div className="glass-card p-5 sm:p-8 text-center"><p className="text-[9px] sm:text-[10px] text-muted uppercase font-black mb-2">{t('admin.driver_payouts')}</p><p className="text-2xl sm:text-4xl font-black text-green-600">₹39,847</p><div className="mt-3 flex items-center justify-center gap-2 text-xs text-green-600 font-bold"><FaArrowUp /> {t('admin.vs_last_month', { percent: 8 })}</div></div>
                 <div className="glass-card p-5 sm:p-8 text-center"><p className="text-[9px] sm:text-[10px] text-muted uppercase font-black mb-2">{t('admin.platform_growth')}</p><p className="text-2xl sm:text-4xl font-black text-blue-600">28%</p><div className="mt-3 flex items-center justify-center gap-2 text-xs text-green-600 font-bold"><FaArrowUp /> {t('admin.consistent')}</div></div>
              </div>
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">

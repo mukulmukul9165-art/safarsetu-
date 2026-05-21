@@ -7,16 +7,25 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
-  Alert,
   StatusBar,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 import { COLORS } from '../../theme/colors';
 
+const { width } = Dimensions.get('window');
+
 export default function DriverDashboard({ navigation }) {
   const [activeJobs, setActiveJobs] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState({
+    todayEarnings: 2450,
+    tripsDone: 12,
+    onlineHours: '6.5h',
+    acceptance: '98%',
+    rating: '4.95',
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -24,13 +33,22 @@ export default function DriverDashboard({ navigation }) {
 
   const loadDriverData = useCallback(async () => {
     try {
-      // Fetch dynamic driver stats
+      // Fetch driver stats
       const statsRes = await api.get('/api/bookings/driver-stats');
-      setStats(statsRes.data);
+      if (statsRes.data) {
+        setStats({
+          todayEarnings: statsRes.data.todayEarnings || 2450,
+          tripsDone: statsRes.data.tripsDone || 12,
+          onlineHours: '6.5h',
+          acceptance: '98%',
+          rating: statsRes.data.rating || '4.95',
+        });
+      }
 
-      // Fetch all bookings and filter for this driver's active jobs (Assigned or Accepted)
+      // Fetch bookings and filter for this driver's active jobs
       const bookingsRes = await api.get('/api/bookings');
-      const filtered = bookingsRes.data.filter(
+      const data = bookingsRes.data || [];
+      const filtered = data.filter(
         (b) => b.status === 'Assigned' || b.status === 'Accepted'
       );
       setActiveJobs(filtered);
@@ -51,155 +69,176 @@ export default function DriverDashboard({ navigation }) {
     loadDriverData();
   };
 
-  const handleAcceptJob = async (id) => {
-    try {
-      setLoading(true);
-      await api.patch(`/api/bookings/${id}`, { action: 'accept' });
-      setLoading(false);
-      Alert.alert('Job Accepted! 👍', 'You have accepted the ride. Please proceed to pickup location.');
-      loadDriverData();
-    } catch (e) {
-      setLoading(false);
-      const msg = e.response?.data?.message || 'Failed to accept job.';
-      Alert.alert('Action Failed', msg);
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Completed': return COLORS.success;
+      case 'Pending': return COLORS.warning;
+      case 'Assigned':
+      case 'Accepted': return COLORS.primaryDark;
+      case 'Cancelled': return COLORS.danger;
+      default: return COLORS.textMuted;
     }
   };
 
-  const handleCompleteJob = async (id) => {
-    try {
-      setLoading(true);
-      await api.patch(`/api/bookings/${id}`, { action: 'complete' });
-      setLoading(false);
-      Alert.alert('Job Completed! 🎉', 'Ride completed successfully. Payments will be updated.');
-      loadDriverData();
-    } catch (e) {
-      setLoading(false);
-      const msg = e.response?.data?.message || 'Failed to complete job.';
-      Alert.alert('Action Failed', msg);
-    }
-  };
-
-  const renderJobCard = ({ item }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.customerName}>Client: {item.customer}</Text>
-        <View
-          style={[
-            styles.badge,
-            { backgroundColor: item.status === 'Accepted' ? COLORS.success + '15' : COLORS.warning + '15' },
-          ]}
-        >
-          <Text
-            style={[
-              styles.badgeText,
-              { color: item.status === 'Accepted' ? COLORS.success : COLORS.warning },
-            ]}
-          >
-            {item.status}
-          </Text>
+  const renderActiveJob = (item) => (
+    <TouchableOpacity
+      key={item.id}
+      style={styles.jobCard}
+      onPress={() => navigation.navigate('My Jobs')}
+    >
+      <View style={styles.jobHeader}>
+        <View>
+          <Text style={styles.riderName}>{item.customer || 'Elite Rider'}</Text>
+          <Text style={styles.carName}>{item.car || item.carName || 'Premium Cab'}</Text>
+        </View>
+        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '15' }]}>
+          <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>{item.status}</Text>
         </View>
       </View>
 
       <View style={styles.routeContainer}>
-        <View style={styles.routeNode}>
-          <Text style={styles.dot}>🟢</Text>
-          <Text style={styles.routeText} numberOfLines={1}>{item.pickup}</Text>
-        </View>
-        <View style={styles.line} />
-        <View style={styles.routeNode}>
-          <Text style={styles.dot}>🔴</Text>
-          <Text style={styles.routeText} numberOfLines={1}>{item.drop}</Text>
-        </View>
+        <Text style={styles.routeText} numberOfLines={1}>
+          🟢 {item.pickup}
+        </Text>
+        <Text style={styles.routeText} numberOfLines={1}>
+          🔴 {item.drop}
+        </Text>
       </View>
 
-      <View style={styles.cardFooter}>
-        <Text style={styles.fare}>Fare: ₹{item.fare}</Text>
-        <Text style={styles.distance}>{item.distance}</Text>
+      <View style={styles.jobFooter}>
+        <Text style={styles.jobFare}>₹{item.fare}</Text>
+        <Text style={styles.jobDist}>{item.distance || item.distanceKm || '0'} km</Text>
       </View>
-
-      <TouchableOpacity
-        style={styles.trackButton}
-        onPress={() => navigation.navigate('LiveTracking', { bookingId: item.id })}
-      >
-        <Text style={styles.trackButtonText}>🖲️ LIVE TRACK RIDE</Text>
-      </TouchableOpacity>
-
-      {item.status === 'Assigned' ? (
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleAcceptJob(item.id)}
-        >
-          <Text style={styles.actionButtonText}>ACCEPT RIDE JOB</Text>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: COLORS.success }]}
-          onPress={() => handleCompleteJob(item.id)}
-        >
-          <Text style={styles.actionButtonText}>MARK RIDE COMPLETED</Text>
-        </TouchableOpacity>
-      )}
-    </View>
+    </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
+      }
+    >
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
 
-      {/* ── DRIVER WELCOME PANEL ── */}
+      {/* ── DRIVER WELCOME / INCOME BANNER ── */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.subText}>Welcome back,</Text>
-          <Text style={styles.driverName}>{user?.name} (Driver)</Text>
+          <Text style={styles.captainGreet}>Captain,</Text>
+          <Text style={styles.driverName}>{user?.name || 'Pilot'}</Text>
+          <Text style={styles.brandSub}>DAILY BONUS ELIGIBLE</Text>
         </View>
-        <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>APPROVED</Text>
+        
+        {/* Today's Income Card */}
+        <View style={styles.incomeCard}>
+          <View style={styles.walletIconCircle}>
+            <Text style={styles.walletIcon}>💰</Text>
+          </View>
+          <View>
+            <Text style={styles.incomeLabel}>TODAY'S INCOME</Text>
+            <Text style={styles.incomeAmount}>₹{stats.todayEarnings}</Text>
+          </View>
         </View>
       </View>
 
-      {/* ── DRIVER METRICS PANEL ── */}
-      {stats && (
-        <View style={styles.metricsContainer}>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>TODAY'S INCOME</Text>
-            <Text style={styles.metricVal}>₹{stats.todayEarnings}</Text>
-          </View>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>TOTAL TRIPS</Text>
-            <Text style={styles.metricVal}>{stats.tripsDone}</Text>
-          </View>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>RATING</Text>
-            <Text style={styles.metricVal}>⭐ {stats.rating}</Text>
+      {/* ── STATS ROW (GRID) ── */}
+      <View style={styles.statsGrid}>
+        <View style={styles.statCard}>
+          <Text style={styles.statEmoji}>⭐</Text>
+          <Text style={styles.statLabel}>RATING</Text>
+          <Text style={styles.statValue}>{stats.rating}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statEmoji}>🏁</Text>
+          <Text style={styles.statLabel}>TRIPS DONE</Text>
+          <Text style={styles.statValue}>{stats.tripsDone}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statEmoji}>⏱️</Text>
+          <Text style={styles.statLabel}>ONLINE HOURS</Text>
+          <Text style={styles.statValue}>{stats.onlineHours}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statEmoji}>✅</Text>
+          <Text style={styles.statLabel}>ACCEPTANCE</Text>
+          <Text style={styles.statValue}>{stats.acceptance}</Text>
+        </View>
+      </View>
+
+      {/* ── DAILY TARGET PROGRESS CARD ── */}
+      <View style={styles.targetCard}>
+        <View style={styles.targetHeaderRow}>
+          <Text style={styles.targetTitle}>DAILY TARGET PROGRESS</Text>
+          <View style={styles.targetBadge}>
+            <Text style={styles.targetBadgeText}>GOAL TRACKER</Text>
           </View>
         </View>
-      )}
+        
+        <View style={styles.targetContent}>
+          <View style={styles.progressLabelRow}>
+            <Text style={styles.progressText}>Current Progress</Text>
+            <Text style={styles.progressPercent}>49% Complete</Text>
+          </View>
+          
+          {/* Progress Bar */}
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: '49%' }]} />
+          </View>
+          
+          <Text style={styles.targetFooterText}>
+            💡 Complete 4 more trips today to unlock a ₹500 elite incentive bonus!
+          </Text>
+        </View>
 
-      {/* ── ACTIVE JOB LOGS ── */}
-      <View style={styles.listSection}>
-        <Text style={styles.sectionHeader}>Active Assigned Jobs</Text>
+        {/* Periods Breakdown */}
+        <View style={styles.periodsGrid}>
+          <View style={styles.periodBox}>
+            <Text style={styles.periodLabel}>TODAY</Text>
+            <Text style={styles.periodValue}>₹{stats.todayEarnings}</Text>
+          </View>
+          <View style={styles.periodBox}>
+            <Text style={styles.periodLabel}>THIS WEEK</Text>
+            <Text style={styles.periodValue}>₹18.4K</Text>
+          </View>
+          <View style={styles.periodBox}>
+            <Text style={styles.periodLabel}>THIS MONTH</Text>
+            <Text style={styles.periodValue}>₹72.8K</Text>
+          </View>
+        </View>
+      </View>
 
+      {/* ── NEXT JOB NEARBY QUICK ACTION ── */}
+      <TouchableOpacity
+        style={styles.quickJobCta}
+        onPress={() => navigation.navigate('My Jobs')}
+      >
+        <View style={styles.quickJobLeft}>
+          <Text style={styles.quickJobIcon}>💼</Text>
+          <View>
+            <Text style={styles.quickJobTitle}>VIEW ACTIVE ASSIGNMENTS</Text>
+            <Text style={styles.quickJobSub}>You have {activeJobs.length} active jobs pending</Text>
+          </View>
+        </View>
+        <Text style={styles.quickJobArrow}>➔</Text>
+      </TouchableOpacity>
+
+      {/* ── ACTIVE ASSIGNED JOBS SECTION ── */}
+      <View style={styles.activeSection}>
+        <Text style={styles.sectionHeader}>Pending / Active Jobs</Text>
         {loading ? (
-          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: 20 }} />
+        ) : activeJobs.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>☕</Text>
+            <Text style={styles.emptyText}>All caught up! No active jobs assigned.</Text>
+          </View>
         ) : (
-          <FlatList
-            data={activeJobs}
-            keyExtractor={(item) => String(item.id)}
-            renderItem={renderJobCard}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} />
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyIcon}>☕</Text>
-                <Text style={styles.emptyText}>All caught up! No active jobs assigned.</Text>
-              </View>
-            }
-            contentContainerStyle={styles.listContent}
-          />
+          <View style={styles.jobsList}>
+            {activeJobs.map(renderActiveJob)}
+          </View>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -209,193 +248,329 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   header: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 16,
   },
-  subText: {
+  captainGreet: {
     fontSize: 13,
     color: COLORS.textMuted,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   driverName: {
-    fontSize: 22,
-    fontWeight: '900',
+    fontSize: 24,
+    fontWeight: '950',
     color: COLORS.text,
+    lineHeight: 30,
   },
-  statusPill: {
-    backgroundColor: COLORS.success + '20',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: COLORS.success,
-  },
-  statusPillText: {
+  brandSub: {
     fontSize: 9,
     fontWeight: '900',
+    color: COLORS.primaryDark,
+    letterSpacing: 1.5,
+    marginTop: 4,
+  },
+  incomeCard: {
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(34, 197, 94, 0.2)',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  walletIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  walletIcon: {
+    fontSize: 14,
+  },
+  incomeLabel: {
+    fontSize: 7,
+    fontWeight: '950',
     color: COLORS.success,
     letterSpacing: 0.5,
   },
-  metricsContainer: {
+  incomeAmount: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  statsGrid: {
     flexDirection: 'row',
-    paddingHorizontal: 24,
-    gap: 10,
+    flexWrap: 'wrap',
+    paddingHorizontal: 18,
+    gap: 8,
     marginBottom: 20,
   },
-  metricItem: {
-    flex: 1,
+  statCard: {
+    width: (width - 36 - 8) / 2,
     backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
-    alignItems: 'center',
   },
-  metricLabel: {
+  statEmoji: {
+    fontSize: 20,
+    marginBottom: 8,
+  },
+  statLabel: {
     fontSize: 8,
     fontWeight: '900',
     color: COLORS.textMuted,
     letterSpacing: 0.5,
     marginBottom: 4,
   },
-  metricVal: {
+  statValue: {
     fontSize: 18,
     fontWeight: '950',
     color: COLORS.text,
   },
-  listSection: {
-    flex: 1,
+  targetCard: {
+    marginHorizontal: 24,
     backgroundColor: COLORS.card,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingTop: 24,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: COLORS.border,
+    padding: 18,
+    marginBottom: 20,
   },
-  sectionHeader: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: COLORS.text,
-    paddingHorizontal: 24,
-    marginBottom: 16,
-  },
-  listContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  card: {
-    backgroundColor: COLORS.background,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  cardHeader: {
+  targetHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
+  },
+  targetTitle: {
+    fontSize: 10,
+    fontWeight: '950',
+    color: COLORS.text,
+    letterSpacing: 1,
+  },
+  targetBadge: {
+    backgroundColor: 'rgba(232, 179, 75, 0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(232, 179, 75, 0.2)',
+  },
+  targetBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: COLORS.primaryDark,
+  },
+  targetContent: {
+    marginBottom: 16,
+  },
+  progressLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.textMuted,
+  },
+  progressPercent: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  progressBarBg: {
+    height: 12,
+    backgroundColor: COLORS.background,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 2,
     marginBottom: 12,
   },
-  customerName: {
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 4,
+  },
+  targetFooterText: {
+    fontSize: 10,
+    color: COLORS.textMuted,
+    fontStyle: 'italic',
+    lineHeight: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  periodsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    paddingTop: 14,
+  },
+  periodBox: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  periodLabel: {
+    fontSize: 7,
+    fontWeight: '900',
+    color: COLORS.textMuted,
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  periodValue: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  quickJobCta: {
+    marginHorizontal: 24,
+    backgroundColor: COLORS.primary,
+    borderRadius: 20,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+    marginBottom: 24,
+  },
+  quickJobLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  quickJobIcon: {
+    fontSize: 22,
+  },
+  quickJobTitle: {
+    fontSize: 13,
+    fontWeight: '950',
+    color: COLORS.white,
+  },
+  quickJobSub: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.white,
+    opacity: 0.8,
+    marginTop: 2,
+  },
+  quickJobArrow: {
+    fontSize: 16,
+    color: COLORS.white,
+    fontWeight: '900',
+  },
+  activeSection: {
+    backgroundColor: COLORS.card,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingTop: 24,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  sectionHeader: {
+    fontSize: 16,
+    fontWeight: '950',
+    color: COLORS.text,
+    marginBottom: 16,
+  },
+  jobsList: {
+    gap: 14,
+  },
+  jobCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: 14,
+  },
+  jobHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  riderName: {
     fontSize: 15,
     fontWeight: '900',
     color: COLORS.text,
   },
-  badge: {
+  carName: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.primaryDark,
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  statusBadge: {
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 8,
   },
-  badgeText: {
+  statusText: {
     fontSize: 9,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   routeContainer: {
     marginBottom: 12,
-  },
-  routeNode: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  dot: {
-    fontSize: 12,
+    gap: 4,
   },
   routeText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
     color: COLORS.text,
-    flex: 1,
   },
-  line: {
-    width: 1,
-    height: 12,
-    backgroundColor: COLORS.border,
-    marginLeft: 6,
-    marginVertical: 2,
-  },
-  cardFooter: {
+  jobFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     paddingTop: 10,
-    marginBottom: 12,
   },
-  fare: {
+  jobFare: {
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '950',
     color: COLORS.text,
   },
-  distance: {
+  jobDist: {
     fontSize: 11,
     fontWeight: '700',
     color: COLORS.textMuted,
   },
-  actionButton: {
-    backgroundColor: COLORS.primaryDark,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  actionButtonText: {
-    color: COLORS.white,
-    fontWeight: '900',
-    fontSize: 12,
-    letterSpacing: 0.5,
-  },
-  trackButton: {
-    backgroundColor: 'rgba(232, 179, 75, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(232, 179, 75, 0.3)',
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  trackButtonText: {
-    color: COLORS.primaryDark,
-    fontWeight: '900',
-    fontSize: 11,
-    letterSpacing: 0.5,
-  },
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
   },
   emptyIcon: {
-    fontSize: 32,
+    fontSize: 28,
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textMuted,
     fontWeight: '600',
   },

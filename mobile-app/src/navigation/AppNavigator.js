@@ -13,11 +13,16 @@ import SignupScreen from '../screens/auth/SignupScreen';
 // Customer Screens
 import CustomerDashboard from '../screens/customer/CustomerDashboard';
 import BookRideScreen from '../screens/customer/BookRideScreen';
+import MyRidesScreen from '../screens/customer/MyRidesScreen';
+import SupportScreen from '../screens/customer/SupportScreen';
 import LiveTrackingScreen from '../screens/customer/LiveTrackingScreen';
 import AdminMapScreen from '../screens/admin/AdminMapScreen';
 
 // Driver Screens
 import DriverDashboard from '../screens/driver/DriverDashboard';
+import DriverJobsScreen from '../screens/driver/DriverJobsScreen';
+import DriverEarningsScreen from '../screens/driver/DriverEarningsScreen';
+import DriverHistoryScreen from '../screens/driver/DriverHistoryScreen';
 
 // Admin Screens
 import AdminDashboard from '../screens/admin/AdminDashboard';
@@ -80,6 +85,22 @@ function CustomerTabNavigator() {
         }}
       />
       <Tab.Screen
+        name="MyRides"
+        component={MyRidesScreen}
+        options={{
+          title: 'My Rides',
+          tabBarIcon: ({ focused }) => <TabBarIcon text="📋" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Support"
+        component={SupportScreen}
+        options={{
+          title: 'Support',
+          tabBarIcon: ({ focused }) => <TabBarIcon text="🎧" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
@@ -138,8 +159,32 @@ function DriverTabNavigator() {
         name="DriverHome"
         component={DriverDashboard}
         options={{
-          title: 'Active Jobs',
+          title: 'Safar Driver',
+          tabBarIcon: ({ focused }) => <TabBarIcon text="🚖" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="My Jobs"
+        component={DriverJobsScreen}
+        options={{
+          title: 'My Jobs',
           tabBarIcon: ({ focused }) => <TabBarIcon text="💼" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="Earnings"
+        component={DriverEarningsScreen}
+        options={{
+          title: 'Earnings',
+          tabBarIcon: ({ focused }) => <TabBarIcon text="💰" focused={focused} />,
+        }}
+      />
+      <Tab.Screen
+        name="History"
+        component={DriverHistoryScreen}
+        options={{
+          title: 'History',
+          tabBarIcon: ({ focused }) => <TabBarIcon text="🕐" focused={focused} />,
         }}
       />
       <Tab.Screen
@@ -260,7 +305,7 @@ export default function AppNavigator() {
           {user?.role === 'driver' && (
             <Stack.Screen name="DriverRoot" component={DriverNavigator} />
           )}
-          {user?.role === 'admin' && (
+          {(user?.role === 'admin' || user?.role === 'superadmin') && (
             <Stack.Screen name="AdminRoot" component={AdminNavigator} />
           )}
         </>
